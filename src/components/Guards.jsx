@@ -14,9 +14,10 @@ export function FullScreenLoader() {
 export function RequireUser({ children }) {
   const { status } = useAuth();
   if (status === 'loading') return <FullScreenLoader />;
-  if (status === 'guest') return <Navigate to="/login" replace />;
   if (status === 'admin') return <Navigate to="/admin" replace />;
-  return children;
+  if (status === 'user') return children;
+  // guest | no_telegram | not_registered — hammasi /login'ga (Telegram gate)
+  return <Navigate to="/login" replace />;
 }
 
 /** Faqat mehmon (login qilinmagan) uchun sahifalar, masalan Login */
@@ -32,7 +33,7 @@ export function RequireGuest({ children }) {
 export function RequireAdmin({ children }) {
   const { status } = useAuth();
   if (status === 'loading') return <FullScreenLoader />;
-  if (status === 'guest') return <Navigate to="/login" replace />;
+  if (status === 'admin') return children;
   if (status === 'user') return <Navigate to="/" replace />;
-  return children;
+  return <Navigate to="/login" replace />;
 }

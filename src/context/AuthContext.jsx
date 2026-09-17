@@ -1,11 +1,22 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { api, setCsrfToken } from '../lib/api';
+import { api, setCsrfToken, ApiError } from '../lib/api';
 
 const AuthContext = createContext(null);
 
+// Telegram Web (brauzer versiyasi: web.telegram.org) shu platform
+// qiymatlarini beradi — bularga ruxsat berilmaydi, faqat native
+// ilova (Android/iOS/macOS/Desktop) orqali ochilganda ishlaydi.
+const WEB_PLATFORMS = ['web', 'weba', 'webk'];
+
+function getTelegramWebApp() {
+  return window.Telegram?.WebApp || null;
+}
+
 export function AuthProvider({ children }) {
-  const [status, setStatus] = useState('loading'); // loading | guest | user | admin
+  // loading | guest | user | admin | no_telegram | web_client | not_registered
+  const [status, setStatus] = useState('loading');
   const [user, setUser] = useState(null);
+  const [authError, setAuthError] = useState('');
 
   const refresh = useCallback(async () => {
     const data = await api.get('/auth/me.php');
@@ -23,15 +34,49 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
-  useEffect(() => {
-    refresh().catch(() => setStatus('guest'));
+  // Ilova faqat Telegram'ning NATIVE ilovasi ichida ishlaydi — login/parol
+  // o'rniga Telegram.WebApp.initData avtomatik yuboriladi va serverda
+  // tekshiriladi. Telegram Web (brauzer versiyasi) ataylab bloklanadi.
+  const loginWithTelegram = useCallback(async () => {
+    const tg = getTelegramWebApp();
+    const initData = tg?.initData || '';
+    const platform = tg?.platform || '';
+
+    if (WEB_PLATFORMS.includes(platform)) {
+      setStatus('web_client');
+      return;
+    }
+    if (!initData) {
+      setStatus('no_telegram');
+      return;
+    }
+    try {
+      await api.post('/auth/telegram.php', { initData });
+      await refresh();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'NOT_REGISTERED') {
+        setStatus('not_registered');
+      } else {
+        setAuthError(err instanceof ApiError ? err.message : 'Kirishda xatolik yuz berdi.');
+        setStatus('no_telegram');
+      }
+    }
   }, [refresh]);
 
-  const login = useCallback(async (loginName, pass) => {
-    const data = await api.post('/auth/login.php', { login: loginName, pass });
-    await refresh();
-    return data;
-  }, [refresh]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await refresh();
+        if (!data.authenticated) {
+          await loginWithTelegram();
+        }
+      } catch {
+        await loginWithTelegram();
+      }
+    })();
+    // Faqat ilk yuklanishda ishga tushadi
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const logout = useCallback(async () => {
     await api.post('/auth/logout.php');
@@ -44,7 +89,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ status, user, login, logout, refresh, updateBalance }}>
+    <AuthContext.Provider
+      value={{ status, user, authError, logout, refresh, updateBalance, loginWithTelegram }}
+    >
       {children}
     </AuthContext.Provider>
   );

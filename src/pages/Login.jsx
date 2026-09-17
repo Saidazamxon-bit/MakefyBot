@@ -1,99 +1,123 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ApiError } from '../lib/api';
+import { api, ApiError } from '../lib/api';
+
+const BOT_LINK = 'https://t.me/Makefybot';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { status, authError } = useAuth();
   const navigate = useNavigate();
-  const [loginName, setLoginName] = useState('');
-  const [pass, setPass] = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e) {
+  // Admin uchun yashirin kirish — oddiy foydalanuvchilar buni ko'rmaydi/ishlatmaydi
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [adminLogin, setAdminLogin] = useState('');
+  const [adminPass, setAdminPass] = useState('');
+  const [adminError, setAdminError] = useState('');
+  const [adminLoading, setAdminLoading] = useState(false);
+
+  useEffect(() => {
+    if (status === 'user') navigate('/', { replace: true });
+    if (status === 'admin') navigate('/admin', { replace: true });
+  }, [status, navigate]);
+
+  async function handleAdminSubmit(e) {
     e.preventDefault();
-    setError('');
-    if (!loginName.trim() || !pass) {
-      setError('Login va parolni kiriting.');
-      return;
-    }
-    setLoading(true);
+    setAdminError('');
+    setAdminLoading(true);
     try {
-      const result = await login(loginName.trim(), pass);
-      navigate(result.role === 'admin' ? '/admin' : '/', { replace: true });
+      const data = await api.post('/auth/login.php', { login: adminLogin.trim(), pass: adminPass });
+      navigate(data.role === 'admin' ? '/admin' : '/', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Kirishda xatolik yuz berdi.');
+      setAdminError(err instanceof ApiError ? err.message : 'Kirishda xatolik yuz berdi.');
     } finally {
-      setLoading(false);
+      setAdminLoading(false);
     }
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-bg text-text-muted">
+        <span className="w-9 h-9 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+        <span className="text-sm font-medium">Telegram orqali tekshirilmoqda...</span>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-5 bg-bg">
-      <div className="w-full max-w-sm bg-surface border border-border rounded-[var(--radius-xl)] p-6 shadow-[var(--shadow-card)]">
-        <div className="text-center mb-6">
-          <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-accent-soft text-accent flex items-center justify-center text-2xl">
-            <i className="fa-solid fa-robot" />
-          </div>
-          <h2 className="text-lg font-extrabold">MakerBot kabinetiga kirish</h2>
-          <p className="text-sm text-text-muted mt-1">Login va parolingizni kiriting</p>
+      <div className="w-full max-w-sm bg-surface border border-border rounded-[var(--radius-xl)] p-6 shadow-[var(--shadow-card)] text-center">
+        <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-accent-soft text-accent flex items-center justify-center text-2xl">
+          <i className="fa-brands fa-telegram" />
         </div>
+        <h2 className="text-lg font-extrabold">Faqat Telegram orqali</h2>
 
-        <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
-          <div className="relative">
-            <i className="fa-solid fa-user absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" />
+        {status === 'not_registered' ? (
+          <p className="text-sm text-text-muted mt-2">
+            Hisobingiz topilmadi. Avval botga <b>/start</b> bosing, keyin ilovani qayta oching.
+          </p>
+        ) : status === 'web_client' ? (
+          <p className="text-sm text-text-muted mt-2">
+            Telegram veb-versiyasida (web.telegram.org) ishlamaydi. Telefoningizdagi yoki
+            kompyuteringizdagi <b>Telegram ilovasi</b>da oching.
+          </p>
+        ) : (
+          <p className="text-sm text-text-muted mt-2">
+            Bu ilova brauzerda emas, faqat Telegram bot ichida ishlaydi. Pastdagi tugma orqali
+            botni oching va u yerdan &quot;Web ilova&quot; tugmasini bosing.
+          </p>
+        )}
+
+        {authError && (
+          <div className="text-[13px] font-semibold text-danger bg-danger-soft rounded-[var(--radius-sm)] px-3 py-2 mt-3">
+            {authError}
+          </div>
+        )}
+
+        <a
+          href={BOT_LINK}
+          className="mt-5 inline-flex w-full items-center justify-center gap-2 py-3 rounded-[var(--radius-md)] bg-gradient-to-r from-accent to-accent-dim text-accent-text font-extrabold text-[15px]"
+        >
+          <i className="fa-brands fa-telegram" />
+          Botni ochish
+        </a>
+
+        <button
+          type="button"
+          onClick={() => setShowAdmin((v) => !v)}
+          className="mt-6 text-[11px] text-text-dim underline underline-offset-2"
+        >
+          Admin kirish
+        </button>
+
+        {showAdmin && (
+          <form onSubmit={handleAdminSubmit} autoComplete="off" className="space-y-3 mt-3 text-left">
             <input
               type="text"
-              value={loginName}
-              onChange={(e) => setLoginName(e.target.value)}
-              placeholder="Login"
-              autoFocus
-              className="w-full pl-11 pr-4 py-3 rounded-[var(--radius-md)] bg-surface-2 border border-border text-[15px] outline-none focus:border-accent transition-colors"
+              value={adminLogin}
+              onChange={(e) => setAdminLogin(e.target.value)}
+              placeholder="Admin login"
+              className="w-full px-4 py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border text-[14px] outline-none focus:border-accent transition-colors"
             />
-          </div>
-
-          <div className="relative">
-            <i className="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" />
             <input
-              type={showPass ? 'text' : 'password'}
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
+              type="password"
+              value={adminPass}
+              onChange={(e) => setAdminPass(e.target.value)}
               placeholder="Parol"
-              className="w-full pl-11 pr-11 py-3 rounded-[var(--radius-md)] bg-surface-2 border border-border text-[15px] outline-none focus:border-accent transition-colors"
+              className="w-full px-4 py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border text-[14px] outline-none focus:border-accent transition-colors"
             />
+            {adminError && (
+              <div className="text-[12px] font-semibold text-danger">{adminError}</div>
+            )}
             <button
-              type="button"
-              onClick={() => setShowPass((v) => !v)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-text-dim"
-              tabIndex={-1}
+              type="submit"
+              disabled={adminLoading}
+              className="w-full py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border font-bold text-[13px] disabled:opacity-60"
             >
-              <i className={`fa-solid ${showPass ? 'fa-eye-slash' : 'fa-eye'}`} />
+              {adminLoading ? 'Tekshirilmoqda...' : 'Kirish'}
             </button>
-          </div>
-
-          {error && (
-            <div className="text-[13px] font-semibold text-danger bg-danger-soft rounded-[var(--radius-sm)] px-3 py-2">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 rounded-[var(--radius-md)] bg-gradient-to-r from-accent to-accent-dim text-accent-text font-extrabold text-[15px] disabled:opacity-60"
-          >
-            {loading ? 'Tekshirilmoqda...' : 'Kirish'}
-          </button>
-
-          <div className="text-center">
-            <Link to="/forgot-password" className="text-[12.5px] font-bold text-accent-dim">
-              <i className="fa-solid fa-circle-question mr-1" />
-              Parolni unutdingizmi?
-            </Link>
-          </div>
-        </form>
+          </form>
+        )}
       </div>
     </div>
   );

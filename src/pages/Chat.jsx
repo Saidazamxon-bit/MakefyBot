@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, mediaUrl } from '../lib/api';
 
 const POLL_MS = 3000;
 const SILENT_TEXTS = ['📷 Rasm'];
@@ -202,7 +202,7 @@ function Bubble({ message: m, onAction }) {
         {media.length > 0 && (
           <div className="mt-1.5 space-y-1.5">
             {media.map((img, i) => (
-              <img key={i} src={img.url} alt="" className="rounded-[var(--radius-sm)] max-w-full" />
+              <img key={i} src={mediaUrl(img.url)} alt="" className="rounded-[var(--radius-sm)] max-w-full" />
             ))}
           </div>
         )}
