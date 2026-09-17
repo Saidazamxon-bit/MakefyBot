@@ -52,7 +52,8 @@ async function request(path, { method = 'GET', body } = {}) {
   }
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const url = `${API_BASE}${API_PREFIX}${normalizedPath}`;
+  const publicPath = normalizedPath.replace(/\.php(?=($|\?))/, '');
+  const url = `${API_BASE}${API_PREFIX}${publicPath}`;
   let res;
   try {
     res = await fetch(url, {
