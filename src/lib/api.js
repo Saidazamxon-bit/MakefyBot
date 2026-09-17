@@ -7,6 +7,10 @@
 const BACKEND_ORIGIN = (
   import.meta.env.VITE_API_BASE_URL || 'https://6a4cc7f182c08.xvest2.ru'
 ).replace(/\/+$/, '');
+
+// API brauzerda same-origin Vercel proxy orqali ishlaydi. Shu sababli
+// backend domeniga bevosita fetch qilinib, CORS xatosi yuzaga kelmaydi.
+const API_BASE = '';
 const API_PREFIX = '/api';
 
 // Backend "/uploads/..." kabi nisbiy (relative) yo'l qaytaradigan joylar bor
@@ -50,7 +54,7 @@ async function request(path, { method = 'GET', body } = {}) {
   }
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const url = `${BACKEND_ORIGIN}${API_PREFIX}${normalizedPath}`;
+  const url = `${API_BASE}${API_PREFIX}${normalizedPath}`;
   let res;
   try {
     res = await fetch(url, {
