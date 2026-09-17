@@ -7,9 +7,7 @@
 const BACKEND_ORIGIN = (
   import.meta.env.VITE_API_BASE_URL || 'https://6a4cc7f182c08.xvest2.ru'
 ).replace(/\/+$/, '');
-
-// API brauzerda same-origin Vercel proxy orqali ishlaydi. Shu sababli
-// backend domeniga bevosita fetch qilinib, CORS xatosi yuzaga kelmaydi.
+// API brauzerda same-origin Vercel proxy orqali ishlaydi.
 const API_BASE = '';
 const API_PREFIX = '/api';
 
