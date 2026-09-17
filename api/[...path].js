@@ -31,7 +31,9 @@ async function readRawBody(req) {
 }
 
 export default async function handler(req, res) {
-  const targetUrl = BACKEND_ORIGIN + req.url;
+  const [requestPath, queryString] = req.url.split('?');
+  const backendPath = requestPath.endsWith('.php') ? requestPath : `${requestPath}.php`;
+  const targetUrl = BACKEND_ORIGIN + backendPath + (queryString ? `?${queryString}` : '');
 
   const headers = {};
   if (req.headers['content-type']) headers['Content-Type'] = req.headers['content-type'];
