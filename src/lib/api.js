@@ -1,15 +1,23 @@
 // Backend JSON API bilan ishlash uchun yagona nuqta.
 // Sessiya PHP cookie orqali ishlaydi (credentials: 'include').
 //
-// MUHIM: so'rovlar ENDI to'g'ridan-to'g'ri boshqa domendagi (hosting)
-// backendga emas, balki shu Vercel loyihasining o'z /api/... yo'liga
-// (serverless proxy funksiyasiga, qarang: /api/[...path].js) yuboriladi.
-// O'sha funksiya orqa fonda (server-to-server) haqiqiy PHP backendga
-// ulanadi — shu sababli bu yerda API_BASE har doim bo'sh ('') qoldiriladi,
-// brauzer nuqtai nazaridan hammasi "bitta domen" ichida bo'ladi va CORS
-// yoki hosting xavfsizlik devori bilan bog'liq muammolar butunlay
-// aylanib o'tiladi.
-const API_BASE = '';
+// Productionda PHP backend boshqa domenda joylashgan. Backend CORS va
+// SameSite=None cookie'larni qo'llab-quvvatlashi kerak; so'rovlar Vercel
+// serverless proxy'sidan o'tmaydi.
+const BACKEND_ORIGIN = (
+  import.meta.env.VITE_API_BASE_URL || 'https://6a4cc7f182c08.xvest2.ru'
+).replace(/\/+$/, '');
+const API_PREFIX = '/api';
+
+// Backend "/uploads/..." kabi nisbiy (relative) yo'l qaytaradigan joylar bor
+// (masalan chatdagi rasmlar) — bular hostingning o'zida joylashgan, Vercel'da
+// emas, shuning uchun to'liq manzilga aylantirib ko'rsatish kerak.
+export function mediaUrl(path) {
+  if (!path) return path;
+  return /^https?:\/\//i.test(path)
+    ? path
+    : `${BACKEND_ORIGIN}${path.startsWith('/') ? path : `/${path}`}`;
+}
 
 let csrfToken = null;
 
@@ -41,7 +49,8 @@ async function request(path, { method = 'GET', body } = {}) {
     finalBody = JSON.stringify(bodyWithCsrf);
   }
 
-  const url = `${API_BASE}/api${path}`;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const url = `${BACKEND_ORIGIN}${API_PREFIX}${normalizedPath}`;
   let res;
   try {
     res = await fetch(url, {
