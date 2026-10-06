@@ -7,7 +7,7 @@
 const BACKEND_ORIGIN = (
   import.meta.env.VITE_API_BASE_URL || 'https://6a4cc7f182c08.xvest2.ru'
 ).replace(/\/+$/, '');
-// API brauzerda same-origin Vercel proxy orqali ishlaydi.
+// API brauzerda Vercel same-origin proxy orqali ishlaydi; backend manzili faqat media URL'lar uchun kerak.
 const API_BASE = '';
 const API_PREFIX = '/api';
 
@@ -35,25 +35,33 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path, { method = 'GET', body } = {}) {
+async function request(path, { method = 'GET', body, retryOnCsrf = true } = {}) {
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
-  const headers = {};
+  const headers = { 'Cache-Control': 'no-store' };
 
   let finalBody;
   if (body === undefined) {
     finalBody = undefined;
   } else if (isFormData) {
+    if (method !== 'GET' && csrfToken && !body.has('_csrf_token')) body.append('_csrf_token', csrfToken);
     finalBody = body; // brauzer Content-Type'ni o'zi qo'yadi (multipart) — bu ham CORS-safe
   } else {
     const bodyWithCsrf =
       method !== 'GET' && csrfToken ? { ...body, _csrf_token: csrfToken } : body;
-    headers['Content-Type'] = 'text/plain;charset=UTF-8'; // ataylab — preflightni oldini olish uchun
+    headers['Content-Type'] = 'application/json;charset=UTF-8'; // same-origin proxy: backendga haqiqiy JSON content-type yuboramiz
     finalBody = JSON.stringify(bodyWithCsrf);
   }
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const publicPath = normalizedPath.replace(/\.php(?=($|\?))/, '');
-  const url = `${API_BASE}${API_PREFIX}${publicPath}`;
+  const [pathPart, queryPart = ''] = publicPath.split('?');
+  const proxyParams = new URLSearchParams();
+  proxyParams.set('__path', pathPart.replace(/^\/+/, ''));
+  if (queryPart) {
+    const originalParams = new URLSearchParams(queryPart);
+    originalParams.forEach((value, key) => proxyParams.append(key, value));
+  }
+  const url = `${API_BASE}${API_PREFIX}/index?${proxyParams.toString()}`;
   let res;
   try {
     res = await fetch(url, {
@@ -61,6 +69,7 @@ async function request(path, { method = 'GET', body } = {}) {
       headers,
       credentials: 'include',
       body: finalBody,
+      cache: 'no-store',
     });
   } catch (networkErr) {
     // fetch() o'zi tashlagan xato (masalan CORS bloklagan yoki server umuman
@@ -86,7 +95,18 @@ async function request(path, { method = 'GET', body } = {}) {
   }
 
   if (!json.ok) {
-    throw new ApiError(json.error || 'Xatolik yuz berdi.', json.error_code || 'ERROR', res.status);
+    if (retryOnCsrf && method !== 'GET' && json.error_code === 'CSRF_INVALID') {
+      // Sessiya cookie'si saqlanib qolgan, ammo token eskirgan bo'lishi mumkin.
+      // Yangi tokenni olib, aynan shu so'rovni faqat bir marta qaytaramiz.
+      const freshSession = await request('/auth/me.php', { method: 'GET', retryOnCsrf: false });
+      if (freshSession?.csrfToken) {
+        csrfToken = freshSession.csrfToken;
+        return request(path, { method, body, retryOnCsrf: false });
+      }
+    }
+    const apiErr = new ApiError(json.error || 'Xatolik yuz berdi.', json.error_code || 'ERROR', res.status);
+    if (json.upgrade) apiErr.upgrade = true; // tarif limiti: UI "Tarifni oshirish" tugmasini ko'rsatadi
+    throw apiErr;
   }
   return json.data;
 }

@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import BroadcastProgress from '../components/BroadcastProgress';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
+import { formatMoney } from '../lib/format';
 
 export default function BotDetail() {
   const { username } = useParams();
@@ -10,6 +12,9 @@ export default function BotDetail() {
   const [newToken, setNewToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [cred, setCred] = useState(null);
+  const [bcText, setBcText] = useState('');
+  const [batchId, setBatchId] = useState(null);
 
   useEffect(() => {
     setError('');
@@ -19,22 +24,22 @@ export default function BotDetail() {
       .catch((err) => setError(err.message));
   }, [username]);
 
-  async function handleTokenChange(e) {
-    e.preventDefault();
+  async function handleTokenChange(event) {
+    event.preventDefault();
     if (!confirm('Token almashtirilsinmi?')) return;
     setBusy(true);
     setMessage('');
     setError('');
     try {
-      const res = await api.post('/mybots/actions.php', {
+      const result = await api.post('/mybots/actions.php', {
         amal: 'token_almashtir',
         eski_user: username,
         yangi_token: newToken,
       });
-      setMessage(res.message);
+      setMessage(result.message);
       setNewToken('');
-      if (res.botUser && res.botUser !== username) {
-        navigate(`/bots/${res.botUser}`, { replace: true });
+      if (result.botUser && result.botUser !== username) {
+        navigate(`/bots/${result.botUser}`, { replace: true });
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Xatolik yuz berdi.');
@@ -43,106 +48,240 @@ export default function BotDetail() {
     }
   }
 
+  async function resetAdmin() {
+    if (!confirm('Yangi admin paroli yaratilsinmi? Eskisi ishlamay qoladi.')) return;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const r = await api.post('/mybots/actions.php', { amal: 'admin_parol_tiklash', bot_user: username });
+      setCred(r.credentials); setMessage(r.message);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Xatolik yuz berdi.');
+    } finally { setBusy(false); }
+  }
+
+  async function sendBroadcast(event) {
+    event.preventDefault();
+    if (!bcText.trim() || !confirm('Barcha foydalanuvchilarga xabar yuborilsinmi?')) return;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const r = await api.post('/bots/broadcast.php', { useri: username, matn: bcText.trim() });
+      setMessage(r.message); setBcText(''); setBatchId(r.batchId || null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Yuborib bo‘lmadi.');
+    } finally { setBusy(false); }
+  }
+
+  const stats = useMemo(() => getStats(data), [data]);
+
   if (error && !data) {
     return (
-      <div className="text-center py-10">
-        <p className="text-danger font-semibold text-sm mb-3">{error}</p>
-        <Link to="/bots" className="text-accent font-bold text-sm">
-          ← Botlarimga qaytish
-        </Link>
+      <div className="mf-page--error">
+        <div className="mf-error-card">
+          <span><i className="fa-solid fa-wifi" /></span>
+          <h1>Botni yuklab bo‘lmadi</h1>
+          <p>{error}</p>
+          <Link to="/bots" className="mf-button mf-button--primary">← Botlarimga qaytish</Link>
+        </div>
       </div>
     );
   }
-  if (!data) return <div className="h-40 rounded-[var(--radius-md)] bg-surface-2 animate-pulse" />;
+  if (!data) return <DetailSkeleton />;
+
+  const isActive = data.faol ?? data.active ?? data.status === 'active';
+  const botUrl = `https://t.me/${String(data.botUser || username).replace(/^@/, '')}`;
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-11 h-11 rounded-2xl bg-accent-soft text-accent flex items-center justify-center text-lg">
-          <i className="fa-solid fa-gear" />
+    <div className="mf-page mf-page--bot-detail">
+      <header className="mf-detail-head">
+        <div className="mf-detail-head__identity">
+          <Link to="/bots" className="mf-icon-button" aria-label="Botlarga qaytish">
+            <i className="fa-solid fa-arrow-left" />
+          </Link>
+          <div className="mf-bot-avatar"><i className="fa-solid fa-robot" /></div>
+          <div>
+            <span className="mf-kicker">BOT CONTROL CENTER</span>
+            <h1>@{data.botUser || username}</h1>
+            <p>{data.turi || 'Bot'} · {data.kun ?? '—'} kunlik muddat</p>
+          </div>
         </div>
-        <h2 className="font-extrabold text-lg">Botingizni sozlang</h2>
-      </div>
-
-      {message && (
-        <div className="text-[13px] font-semibold text-accent bg-accent-soft rounded-[var(--radius-sm)] px-3 py-2 mb-4">
-          {message}
-        </div>
-      )}
-      {error && (
-        <div className="text-[13px] font-semibold text-danger bg-danger-soft rounded-[var(--radius-sm)] px-3 py-2 mb-4">
-          {error}
-        </div>
-      )}
-
-      <div className="rounded-[var(--radius-md)] bg-surface border border-border p-4 divide-y divide-border mb-4">
-        <InfoRow icon="fa-satellite-dish" label="Bot turi" value={data.turi} />
-        <InfoRow icon="fa-at" label="Bot useri" value={`@${data.botUser}`} />
-        <InfoRow icon="fa-hourglass-half" label="To'langan sana" value={`${data.kun} kun`} />
-      </div>
-
-      {data.isV2 && (
-        <Link
-          to={`/bots/${username}/manage`}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-[var(--radius-md)] bg-gradient-to-r from-accent to-accent-dim text-accent-text font-extrabold text-sm mb-4"
-        >
-          <i className="fa-solid fa-sliders" /> Botni sozlash
+        {(data.can || []).includes('members.view') && (
+          <Link to={`/bots/${encodeURIComponent(data.botUser || username)}/team`} className="mf-button mf-button--ghost">
+            <i className="fa-solid fa-user-group" /> Jamoa
+          </Link>
+        )}
+        <Link to={`/analytics?bot=${encodeURIComponent(data.botUser || username)}`} className="mf-button mf-button--ghost">
+          <i className="fa-solid fa-chart-line" /> Tahlil
         </Link>
+        <a href={botUrl} target="_blank" rel="noopener noreferrer" className="mf-button mf-button--ghost">
+          <i className="fa-brands fa-telegram" /> Telegram
+        </a>
+      </header>
+
+      {message && <Banner type="ok">{message}</Banner>}
+      {error && <Banner type="err">{error}</Banner>}
+
+      <section className="mf-detail-hero">
+        <div>
+          <span className={`mf-status-badge ${isActive ? 'is-online' : ''}`}>
+            <i className="fa-solid fa-circle" /> {isActive ? 'Faol ishlayapti' : 'Holat mavjud emas'}
+          </span>
+          <h2>Botingiz ustidan to‘liq nazorat</h2>
+          <p>Sozlamalar, kontent va botga tegishli barcha amallar shu markazda.</p>
+        </div>
+        <div className="mf-detail-hero__accent"><i className="fa-solid fa-sliders" /></div>
+      </section>
+
+      <StatsPanel stats={stats} />
+
+      {data.isTemplate && data.kind === 'anime' && (
+        <div className="mf-notice mf-notice--warn">
+          <i className="fa-solid fa-circle-info" /> Siz botning egasisiz: botga /start yuboring — pastdagi menyuda <b>Admin panel</b> tugmasi chiqadi. Oddiy foydalanuvchilar <b>Web ilova</b> tugmasini ko‘radi.
+        </div>
+      )}
+      {cred && (
+        <section className="mf-detail-card">
+          <div className="mf-detail-card__heading">
+            <span className="mf-detail-card__icon"><i className="fa-solid fa-key" /></span>
+            <div><h2>Yangi admin ma’lumotlari</h2><p>Parol faqat hozir ko‘rsatiladi — saqlab qo‘ying.</p></div>
+          </div>
+          <div className="mf-cred-grid">
+            <div><small>Login</small><code>{cred.login}</code></div>
+            <div><small>Parol</small><code>{cred.password}</code></div>
+          </div>
+        </section>
       )}
 
-      <Link
-        to={`/bots/${username}/kunlik`}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-[var(--radius-md)] bg-surface-2 border border-border font-bold text-sm mb-4"
-      >
-        <i className="fa-solid fa-hourglass-half" /> Kunlik to'lov
-      </Link>
+      <section className="mf-detail-actions">
+        <div className="mf-section-heading">
+          <div><span className="mf-kicker">QUICK CONTROL</span><h2>Boshqaruv</h2></div>
+          <span className="mf-panel__muted">{data.turiNomi || 'Asosiy amallar'}</span>
+        </div>
+        <div className="mf-detail-action-grid">
+          {data.isTemplate && data.panels?.admin && (
+            <a href={data.panels.admin} target="_blank" rel="noopener noreferrer" className="mf-detail-action mf-detail-action--primary">
+              <span><i className="fa-solid fa-user-shield" /></span>
+              <b>Admin panel</b>
+              <small>{data.kind === 'anime' ? 'Telegram ichida ochiladi' : 'Kontent, narx va buyurtmalar'}</small>
+              <i className="fa-solid fa-arrow-up-right-from-square mf-detail-action__arrow" />
+            </a>
+          )}
+          {data.isTemplate && data.panels?.app && (
+            <a href={data.panels.app} target="_blank" rel="noopener noreferrer" className="mf-detail-action">
+              <span><i className="fa-solid fa-window-restore" /></span>
+              <b>Mini App</b>
+              <small>Foydalanuvchilar ko‘radigan ilova</small>
+              <i className="fa-solid fa-arrow-up-right-from-square mf-detail-action__arrow" />
+            </a>
+          )}
+          {data.canResetAdmin && (
+            <button type="button" onClick={resetAdmin} disabled={busy} className="mf-detail-action">
+              <span><i className="fa-solid fa-key" /></span>
+              <b>Admin parolini tiklash</b>
+              <small>Yangi login/parol yaratadi</small>
+            </button>
+          )}
+          <Link to={`/bots/${username}/kunlik`} className="mf-detail-action">
+            <span><i className="fa-solid fa-calendar-check" /></span>
+            <b>Kunlik to‘lov</b>
+            <small>Muddatni uzaytirish</small>
+            <i className="fa-solid fa-arrow-right mf-detail-action__arrow" />
+          </Link>
+          <a href={botUrl} target="_blank" rel="noopener noreferrer" className="mf-detail-action">
+            <span><i className="fa-brands fa-telegram" /></span>
+            <b>Botni ochish</b>
+            <small>Telegram’da ko‘rish</small>
+            <i className="fa-solid fa-arrow-up-right-from-square mf-detail-action__arrow" />
+          </a>
+        </div>
+      </section>
+
+      {data.isTemplate && (data.can || []).includes('broadcast.send') && (
+        <section className="mf-detail-card">
+          <div className="mf-detail-card__heading">
+            <span className="mf-detail-card__icon"><i className="fa-solid fa-bullhorn" /></span>
+            <div><h2>Xabar yuborish</h2><p>Botning barcha foydalanuvchilariga matnli xabar.</p></div>
+          </div>
+          <form onSubmit={sendBroadcast} className="mf-token-form" style={{ flexDirection: 'column' }}>
+            <textarea value={bcText} onChange={(e) => setBcText(e.target.value)} rows={3} maxLength={4000} placeholder="Xabar matni..." style={{ width: '100%', padding: 12, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', font: 'inherit' }} />
+            <button disabled={busy || !bcText.trim()} className="mf-button mf-button--primary"><i className="fa-solid fa-paper-plane" /> Yuborish</button>
+          </form>
+            <BroadcastProgress batchId={batchId} />
+        </section>
+      )}
 
       {data.canChangeToken ? (
-        <div className="rounded-[var(--radius-md)] bg-surface border border-border p-4">
-          <div className="font-bold text-sm flex items-center gap-1.5 mb-1">
-            <i className="fa-solid fa-key text-accent" /> Token yangilash
+        <section className="mf-detail-card">
+          <div className="mf-detail-card__heading">
+            <span className="mf-detail-card__icon"><i className="fa-solid fa-key" /></span>
+            <div><h2>Tokenni yangilash</h2><p>Yangi token tekshiriladi va bot ma’lumotlari ko‘chiriladi.</p></div>
           </div>
-          <p className="text-[12px] text-text-muted mb-3">
-            Tarifingizda ruxsat etilgan. Komissiya olinmaydi. Yangi token tekshiriladi va ma'lumotlar ko'chiriladi.
-          </p>
-          <form onSubmit={handleTokenChange} className="space-y-2">
+          <form onSubmit={handleTokenChange} className="mf-token-form">
             <input
               type="text"
               value={newToken}
-              onChange={(e) => setNewToken(e.target.value)}
+              onChange={(event) => setNewToken(event.target.value)}
               placeholder="Yangi Bot Token"
               required
-              className="w-full px-3 py-2.5 rounded-[var(--radius-sm)] bg-surface-2 border border-border text-sm outline-none focus:border-accent"
             />
-            <button
-              disabled={busy}
-              className="w-full py-2.5 rounded-[var(--radius-sm)] bg-surface-3 border border-border font-bold text-sm disabled:opacity-50"
-            >
-              <i className="fa-solid fa-arrows-rotate mr-1.5" /> Tokenni almashtirish
+            <button disabled={busy} className="mf-button mf-button--primary">
+              <i className="fa-solid fa-arrows-rotate" /> {busy ? 'Tekshirilmoqda...' : 'Almashtirish'}
             </button>
           </form>
-        </div>
+        </section>
       ) : (
-        <div className="text-[12.5px] text-warn bg-warn-soft rounded-[var(--radius-sm)] px-3 py-2.5">
-          <i className="fa-solid fa-lock mr-1.5" />
-          Token yangilash joriy tarifingizda yoqilmagan. Admin belgilagan tarifni tanlang.
+        <div className="mf-notice mf-notice--warn">
+          <i className="fa-solid fa-lock" /> Token yangilash joriy tarifingizda yoqilmagan.
         </div>
       )}
-
-      <Link to="/bots" className="block text-center mt-5 text-sm font-bold text-text-muted">
-        ← Orqaga
-      </Link>
     </div>
   );
 }
 
-function InfoRow({ icon, label, value }) {
+function getStats(data) {
+  const s = data?.stats || {};
+  if (data?.kind === 'starska') {
+    return [
+      { icon: 'fa-users', label: 'Foydalanuvchilar', value: s.users ?? 0 },
+      { icon: 'fa-cart-shopping', label: 'Buyurtmalar', value: s.orders ?? 0 },
+      { icon: 'fa-coins', label: 'Daromad', value: formatMoney(s.revenue || 0) },
+      { icon: 'fa-receipt', label: 'Kutilayotgan to‘lov', value: s.pending ?? 0 },
+    ];
+  }
+  if (data?.kind === 'anime') {
+    return [
+      { icon: 'fa-users', label: 'Foydalanuvchilar', value: s.users ?? 0 },
+      { icon: 'fa-clapperboard', label: 'Animelar', value: s.items ?? 0 },
+      { icon: 'fa-film', label: 'Qismlar', value: s.orders ?? 0 },
+      { icon: 'fa-bullhorn', label: 'Kanallar', value: s.extra?.channels ?? 0 },
+    ];
+  }
+  return [{ icon: 'fa-users', label: 'Foydalanuvchilar', value: readValue(s, ['users']) }];
+}
+
+function readValue(source, keys) {
+  for (const key of keys) {
+    if (source?.[key] !== undefined && source[key] !== null && source[key] !== '') return source[key];
+  }
+  return '—';
+}
+
+function StatsPanel({ stats }) {
   return (
-    <div className="flex items-center justify-between py-2.5 text-sm">
-      <span className="flex items-center gap-2 text-text-muted font-semibold">
-        <i className={`fa-solid ${icon} w-4`} /> {label}
-      </span>
-      <span className="font-bold">{value}</span>
-    </div>
+    <section className="mf-detail-stats">
+      {stats.map((stat) => (
+        <div key={stat.label} className="mf-detail-stat">
+          <span><i className={`fa-solid ${stat.icon}`} /></span>
+          <div><strong>{stat.value}</strong><small>{stat.label}</small></div>
+        </div>
+      ))}
+    </section>
   );
+}
+
+function DetailSkeleton() {
+  return <div className="mf-detail-skeleton"><div /><div /><div /><div /></div>;
+}
+
+function Banner({ type, children }) {
+  return <div className={`mf-notice ${type === 'ok' ? 'mf-notice--ok' : 'mf-notice--err'}`}>{children}</div>;
 }

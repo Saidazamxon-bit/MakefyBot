@@ -1,151 +1,211 @@
-import { useEffect, useState } from 'react';
+import Onboarding from '../components/Onboarding';
+import BroadcastProgress from '../components/BroadcastProgress';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { formatMoney } from '../lib/format';
+import '../styles/home.css';
+
+const num = (v) => new Intl.NumberFormat('uz-UZ').format(Number(v || 0));
+const FILTERS = [['all', 'Barchasi'], ['anime', 'Anime'], ['starska', 'Starska'], ['on', 'Faol'], ['off', 'Nofaol']];
+const QUICK = [
+  ['/create', 'fa-plus', 'Yangi bot', 'Shablondan yaratish'], ['/deposit', 'fa-wallet', 'Balans', 'Hisobni to‘ldirish'],
+  ['/vazifalar', 'fa-bolt', 'Vazifalar', 'Bonus olish'], ['/chat', 'fa-headset', 'Yordam', 'Admin bilan chat'],
+];
+const kindIcon = (k) => (k === 'starska' ? 'fa-star' : k === 'anime' ? 'fa-clapperboard' : 'fa-robot');
 
 export default function Home() {
   const { user, updateBalance } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all');
 
-  useEffect(() => {
-    let alive = true;
-    api
-      .get('/home.php')
-      .then((d) => {
-        if (!alive) return;
-        setData(d);
-        updateBalance(d.balance);
-      })
-      .catch((err) => alive && setError(err.message));
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const load = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const value = await api.get('/home.php');
+      setData(value); setError(''); updateBalance(value?.balance ?? 0);
+    } catch (err) { setError(err.message); } finally { setRefreshing(false); }
+  }, [updateBalance]);
+  useEffect(() => { load(); }, [load]);
 
-  if (error) return <p className="text-danger text-sm">{error}</p>;
-  if (!data) return <HomeSkeleton />;
+  const bots = data?.botsPreview || [];
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return bots.filter((b) => (filter === 'all' || b.kind === filter || (filter === 'on' && b.faol) || (filter === 'off' && !b.faol))
+      && (!q || String(b.username || '').toLowerCase().includes(q)));
+  }, [bots, query, filter]);
+
+  if (error && !data) {
+    return (
+      <div className="mf-page"><div className="mf-error-card">
+        <span><i className="fa-solid fa-wifi" /></span><h1>Ulanib bo‘lmadi</h1><p>{error}</p>
+        <button type="button" onClick={load} className="mf-button mf-button--primary"><i className="fa-solid fa-rotate-right" /> Qayta urinish</button>
+      </div></div>
+    );
+  }
+  if (!data) return <div className="mf-page mf-skeleton"><div className="mf-skeleton__head" /><div className="mf-skeleton__metrics" /><div className="mf-skeleton__columns" /></div>;
+
+  const t = data.totals || {};
+  const board = data.leaderboard?.top || [];
+  const expiring = data.expiring || [];
+  const name = user?.login || 'do‘st';
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-[var(--radius-xl)] bg-gradient-to-br from-surface-2 to-surface p-5 border border-border">
-        <div className="text-xs font-bold text-text-muted uppercase tracking-wide">Balansingiz</div>
-        <div className="text-3xl font-extrabold mt-1">{formatMoney(data.balance)}</div>
-        {data.dailyBonus > 0 && (
-          <div className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-bold text-accent bg-accent-soft px-2.5 py-1 rounded-full">
-            <i className="fa-solid fa-gift" /> Bugungi bonus: +{formatMoney(data.dailyBonus)}
-          </div>
-        )}
-        <div className="flex gap-2 mt-4">
-          <Link
-            to="/deposit"
-            className="flex-1 text-center py-2.5 rounded-[var(--radius-md)] bg-surface-3 border border-border font-bold text-sm"
-          >
-            <i className="fa-solid fa-wallet mr-1.5" /> To'ldirish
-          </Link>
-          <Link
-            to="/create"
-            className="flex-1 text-center py-2.5 rounded-[var(--radius-md)] bg-gradient-to-r from-accent to-accent-dim text-accent-text font-bold text-sm"
-          >
-            <i className="fa-solid fa-plus mr-1.5" /> Bot yaratish
-          </Link>
+    <div className="mf-page hm">
+      <header className="hm-head">
+        <div>
+          <h1>Salom, {name}</h1>
+          <p>{data.botsCount ? `${data.botsCount} ta botingiz bor. Hammasi shu yerdan boshqariladi.` : 'Birinchi botingizni yarating — bir necha daqiqa.'}</p>
         </div>
-      </section>
-
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-extrabold text-[15px]">Botlaringiz ({data.botsCount})</h3>
-          <Link to="/bots" className="text-[12.5px] font-bold text-accent-dim">
-            Barchasi →
-          </Link>
+        <div className="hm-head__act">
+          <button type="button" onClick={load} className="mf-button mf-button--ghost" disabled={refreshing} aria-label="Yangilash">
+            <i className={'fa-solid fa-rotate-right' + (refreshing ? ' fa-spin' : '')} />
+          </button>
+          <Link to="/create" className="mf-button mf-button--primary"><i className="fa-solid fa-plus" /> Yangi bot</Link>
         </div>
-        {data.botsCount === 0 ? (
-          <EmptyCard
-            icon="fa-robot"
-            text="Hali botingiz yo'q"
-            action={
-              <Link to="/create" className="text-accent font-bold text-sm">
-                Birinchi botingizni yarating →
-              </Link>
-            }
-          />
-        ) : (
-          <div className="space-y-2">
-            {data.botsPreview.map((b) => (
-              <Link
-                key={b.username}
-                to={`/bots/${b.username}`}
-                className="flex items-center gap-3 bg-surface border border-border rounded-[var(--radius-md)] px-3.5 py-3"
-              >
-                <span
-                  className={`w-2 h-2 rounded-full flex-shrink-0 ${b.faol ? 'bg-accent' : 'bg-text-dim'}`}
-                />
-                <span className="font-semibold text-sm flex-1 truncate">@{b.username}</span>
-                <i className="fa-solid fa-chevron-right text-text-dim text-xs" />
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+      </header>
 
-      <section className="grid grid-cols-2 gap-3">
-        <Link
-          to="/referal"
-          className="rounded-[var(--radius-md)] bg-surface border border-border p-4"
-        >
-          <i className="fa-solid fa-users text-info text-lg" />
-          <div className="text-xl font-extrabold mt-1.5">{data.referral.count}</div>
-          <div className="text-[12px] text-text-muted font-semibold">Taklif qilinganlar</div>
-        </Link>
-        <Link
-          to="/vazifalar"
-          className="rounded-[var(--radius-md)] bg-surface border border-border p-4"
-        >
-          <i className="fa-solid fa-coins text-warn text-lg" />
-          <div className="text-xl font-extrabold mt-1.5">{formatMoney(data.referral.bonus)}</div>
-          <div className="text-[12px] text-text-muted font-semibold">Referaldan daromad</div>
-        </Link>
-      </section>
-
-      <section>
-        <h3 className="font-extrabold text-[15px] mb-2">Balans reytingi</h3>
-        <div className="rounded-[var(--radius-md)] bg-surface border border-border overflow-hidden">
-          {data.leaderboard.top.map((row) => (
-            <div
-              key={row.user_id}
-              className={`flex items-center gap-3 px-3.5 py-2.5 text-sm ${
-                row.user_id === user?.user_id ? 'bg-accent-soft' : ''
-              } [&:not(:last-child)]:border-b [&:not(:last-child)]:border-border`}
-            >
-              <span className="w-5 text-center font-bold text-text-muted">{row.rank}</span>
-              <span className="flex-1 font-semibold truncate">{row.login}</span>
-              <span className="font-bold">{formatMoney(row.value)}</span>
-            </div>
+      {(expiring.length > 0 || t.pending > 0) && (
+        <div className="hm-alerts">
+          {expiring.map((b) => (
+            <Link key={b.username} to={`/bots/${b.username}/kunlik`} className="hm-alert">
+              <i className="fa-solid fa-hourglass-half" />
+              <span><b>@{b.username}</b> {b.kun <= 0 ? 'muddati tugagan' : `muddati ${b.kun} kunda tugaydi`} — uzaytiring</span>
+              <i className="fa-solid fa-chevron-right" />
+            </Link>
           ))}
+          {t.pending > 0 && (
+            <Link to="/bots" className="hm-alert hm-alert--info">
+              <i className="fa-solid fa-receipt" /><span><b>{t.pending} ta</b> to‘lov tasdiqlanishini kutmoqda</span><i className="fa-solid fa-chevron-right" />
+            </Link>
+          )}
+        </div>
+      )}
+
+      <section className="hm-kpi" aria-label="Umumiy ko‘rsatkichlar">
+        <div><small>Botlar</small><strong>{data.botsCount ?? 0}</strong><em>{data.byType?.anime || 0} anime · {data.byType?.starska || 0} starska</em></div>
+        <div><small>Foydalanuvchilar</small><strong>{num(t.users)}</strong><em>barcha botlarda</em></div>
+        <div><small>Buyurtmalar</small><strong>{num(t.orders)}</strong><em>muvaffaqiyatli</em></div>
+        <div><small>Daromad</small><strong>{formatMoney(t.revenue || 0)}</strong><em>Starska botlardan</em></div>
+        <div><small>Balans</small><strong>{formatMoney(data.balance ?? 0)}</strong><em><Link to="/deposit" className="text-accent">To‘ldirish →</Link></em></div>
+      </section>
+
+      {(bots.length === 0 || !(t.users > 0)) && <Onboarding botCount={bots.length} hasUsers={Number(t.users || 0) > 0} />}
+
+      <section className="hm-sec" aria-label="Botlarni boshqarish">
+        <div className="hm-sec__head">
+          <div><h2>Botlarim</h2><p>Holat, muddat va statistika — bitta jadvalda.</p></div>
+          <Link to="/bots" className="mf-panel__link">Batafsil boshqaruv <i className="fa-solid fa-arrow-right" /></Link>
+        </div>
+        {bots.length > 0 && (
+          <div className="hm-tools">
+            <label className="hm-search"><i className="fa-solid fa-magnifying-glass" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Botni qidirish…" aria-label="Botni qidirish" /></label>
+            <div className="hm-pills" role="tablist">
+              {FILTERS.map(([k, l]) => <button key={k} type="button" className={'hm-pill' + (filter === k ? ' is-on' : '')} onClick={() => setFilter(k)}>{l}</button>)}
+            </div>
+          </div>
+        )}
+        <div className="hm-table">
+          {bots.length === 0 ? (
+            <div className="hm-empty">Hali botingiz yo‘q. <Link to="/create" className="text-accent font-bold">Birinchi botni yarating →</Link></div>
+          ) : (
+            <>
+              <div className="hm-row hm-row--head"><span>Bot</span><span>Holat</span><span>Muddat</span><span>Foydalanuvchi</span><span>Daromad</span><span /></div>
+              {shown.length === 0 && <div className="hm-empty">Hech narsa topilmadi.</div>}
+              {shown.map((b) => <BotRow key={b.username || b.id} bot={b} />)}
+            </>
+          )}
         </div>
       </section>
+
+      <div className="hm-two">
+        {bots.length > 0 && <Broadcast bots={bots} />}
+        <section className="hm-sec">
+          <div className="hm-sec__head"><h2>Balans reytingi</h2></div>
+          <div className="hm-list">
+            {board.length === 0 && <div className="hm-empty">Reyting hozircha bo‘sh.</div>}
+            {board.map((r) => {
+              const me = String(r.user_id) === String(user?.user_id);
+              return <div key={r.user_id} className={'hm-li' + (me ? ' is-me' : '')}><span>{r.rank}</span><b>{r.login}{me && ' (siz)'}</b><span className="hm-num">{formatMoney(r.value)}</span></div>;
+            })}
+          </div>
+        </section>
+      </div>
+
+      <nav className="hm-quick" aria-label="Tezkor havolalar">
+        {QUICK.map(([to, icon, label, note]) => (
+          <Link key={to} to={to}><i className={'fa-solid ' + icon} /><span>{label}<small>{note}</small></span></Link>
+        ))}
+      </nav>
     </div>
   );
 }
 
-function EmptyCard({ icon, text, action }) {
+function BotRow({ bot }) {
+  const s = bot.stats || {};
+  const star = bot.kind === 'starska';
+  const days = Number(bot.kun ?? 0);
+  const link = '/bots/' + bot.username;
   return (
-    <div className="rounded-[var(--radius-md)] bg-surface border border-dashed border-border-light p-6 text-center">
-      <i className={`fa-solid ${icon} text-2xl text-text-dim`} />
-      <p className="text-sm text-text-muted mt-2 mb-1">{text}</p>
-      {action}
+    <div className="hm-row">
+      <Link to={link} className={'hm-bot' + (bot.faol ? ' is-on' : '')}>
+        <span className="hm-bot__ico"><i className={'fa-solid ' + kindIcon(bot.kind)} /></span>
+        <span style={{ minWidth: 0 }}><b>{bot.username ? '@' + bot.username : 'Token kiritilmagan'}</b><small>{bot.turiNomi || 'Bot'}</small></span>
+      </Link>
+      <span data-l="Holat"><span className={'hm-badge' + (bot.faol ? ' is-on' : '')}>{bot.faol ? 'Faol' : 'Nofaol'}</span></span>
+      <span data-l="Muddat" className={'hm-days' + (days <= 0 ? ' is-bad' : days <= 3 ? ' is-warn' : '')}>{days > 0 ? `${days} kun` : 'Tugagan'}</span>
+      <span data-l="Foydalanuvchi" className={'hm-num' + (bot.stats ? '' : ' is-empty')}>{bot.stats ? num(s.users) : '—'}</span>
+      <span data-l="Daromad" className={'hm-num' + (star && bot.stats ? '' : ' is-empty')}>{star && bot.stats ? formatMoney(s.revenue || 0) : '—'}</span>
+      <div className="hm-acts">
+        {bot.panels?.app && <a className="hm-act" href={bot.panels.app} target="_blank" rel="noopener noreferrer"><i className="fa-solid fa-window-restore" /> App</a>}
+        {bot.panels?.admin && <a className="hm-act" href={bot.panels.admin} target="_blank" rel="noopener noreferrer"><i className="fa-solid fa-user-shield" /> Admin</a>}
+        {bot.username && <a className="hm-act" href={'https://t.me/' + bot.username} target="_blank" rel="noopener noreferrer" aria-label="Telegramda ochish"><i className="fa-brands fa-telegram" /></a>}
+        <Link className="hm-act hm-act--main" to={link}><i className="fa-solid fa-sliders" /> Boshqarish</Link>
+      </div>
     </div>
   );
 }
 
-function HomeSkeleton() {
+function Broadcast({ bots }) {
+  const [bot, setBot] = useState(bots[0]?.username || '');
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [batchId, setBatchId] = useState(null);
+
+  async function send(e) {
+    e.preventDefault();
+    if (!text.trim() || !bot) return;
+    if (!window.confirm(`@${bot} foydalanuvchilariga xabar yuborilsinmi?`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.post('/bots/broadcast.php', { useri: bot, matn: text.trim() });
+      setMsg({ ok: true, text: r.message }); setBatchId(r.batchId || null); setText('');
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof ApiError ? err.message : 'Yuborib bo‘lmadi.' });
+    } finally { setBusy(false); }
+  }
+
   return (
-    <div className="space-y-5 animate-pulse">
-      <div className="h-32 rounded-[var(--radius-xl)] bg-surface-2" />
-      <div className="h-24 rounded-[var(--radius-md)] bg-surface-2" />
-      <div className="h-24 rounded-[var(--radius-md)] bg-surface-2" />
-    </div>
+    <section className="hm-sec">
+      <div className="hm-sec__head"><div><h2>Xabar yuborish</h2><p>Botingiz foydalanuvchilariga ommaviy xabar.</p></div></div>
+      <form onSubmit={send} className="hm-form">
+        <select value={bot} onChange={(e) => setBot(e.target.value)} aria-label="Bot">
+          {bots.map((b) => <option key={b.username} value={b.username}>@{b.username}</option>)}
+        </select>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={3} placeholder="Aksiya, yangilik, e’lon…" />
+        <div className="hm-form__foot">
+          <span>{text.length}/4000</span>
+          <button disabled={busy || !text.trim()} className="mf-button mf-button--primary"><i className="fa-solid fa-paper-plane" /> {busy ? 'Yuborilmoqda…' : 'Yuborish'}</button>
+        </div>
+        {msg && <div className={'mf-notice ' + (msg.ok ? 'mf-notice--ok' : 'mf-notice--err')}>{msg.text}</div>}
+      </form>
+      <BroadcastProgress batchId={batchId} />
+    </section>
   );
 }

@@ -2,27 +2,42 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import './index.css';
+import './styles/perf-overrides.css';
+import './styles/templates.css';
+import './styles/theme-fixes.css';
+import './styles/a11y-tokens.css';
+import './styles/polish.css';
+import './styles/redesign.css';
+import './styles/safe-area.css';
 import App from './App.jsx';
+import SmoothScroll from './components/SmoothScroll.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
+import { ThemeProvider } from './context/ThemeContext.jsx';
+import { I18nProvider } from './i18n';
+import { ToastProvider } from './components/ui';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
+import { initTelegramFullscreen } from './lib/telegramFullscreen.js';
 
-// Telegram Web App SDK'ni ilova ochilishi bilanoq ishga tushiramiz —
-// initData shu bosqichda tayyor bo'ladi (AuthContext keyin uni o'qiydi).
 try {
-  const tg = window.Telegram?.WebApp;
-  if (tg) {
-    tg.ready();
-    tg.expand();
-  }
-} catch (e) {
-  // Telegram tashqarisida (oddiy brauzer) ochilsa — bu normal, e'tiborsiz qoldiramiz
-}
+  initTelegramFullscreen(); // Mini Apps 2.0: to'liq ekran + safe area (Telegramdan tashqarida hech narsa qilmaydi)
+} catch { /* Telegram tashqarisida ochilganda normal */ }
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <I18nProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <ThemeProvider>
+              <ToastProvider>
+                <SmoothScroll>
+                  <App />
+                </SmoothScroll>
+              </ToastProvider>
+            </ThemeProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </I18nProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );

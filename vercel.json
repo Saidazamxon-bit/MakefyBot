@@ -1,11 +1,11 @@
 {
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://6a4cc7f182c08.xvest2.ru/api/:path*.php"
+      "source": "/VisionBuilder/bots/:path*",
+      "destination": "/api/bot/:path*"
     },
     {
-      "source": "/((?!assets/|api/).*)",
+      "source": "/((?!assets/|api/|VisionBuilder/).*)",
       "destination": "/index.html"
     }
   ]

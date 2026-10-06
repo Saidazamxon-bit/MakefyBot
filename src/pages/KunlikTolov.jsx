@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { formatMoney } from '../lib/format';
+import BotTarif from '../components/BotTarif';
 
 const QUICK_DAYS = [7, 15, 30, 90];
 
@@ -45,7 +46,7 @@ export default function KunlikTolov() {
   const jami = kunlik * data.narxi;
 
   return (
-    <div>
+    <div className="mf-page mf-page--payment mf-page--standard">
       <div className="flex items-center gap-3 mb-5">
         <div className="w-11 h-11 rounded-2xl bg-accent-soft text-accent flex items-center justify-center text-lg">
           <i className="fa-solid fa-credit-card" />
@@ -55,6 +56,8 @@ export default function KunlikTolov() {
           <p className="text-[12.5px] text-text-muted">@{username}</p>
         </div>
       </div>
+
+      <BotTarif username={username} onChanged={(narxi) => setData((d) => (d ? { ...d, narxi } : d))} />
 
       <div className="rounded-[var(--radius-md)] bg-surface border border-border p-4 mb-4">
         <div className="flex items-center justify-between text-sm mb-2">

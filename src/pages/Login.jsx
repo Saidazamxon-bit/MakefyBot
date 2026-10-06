@@ -1,124 +1,161 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, ApiError } from '../lib/api';
+import GoogleSignInButton from '../components/auth/GoogleSignInButton';
+import './Login.css';
 
-const BOT_LINK = 'https://t.me/Makefybot';
+const statusCopy = {
+  not_registered: {
+    tone: 'warning',
+    title: 'Botda hisobingiz hali faollashmagan',
+    text: 'Telegram’da Makefy botini ochib, /start tugmasini bosing. Keyin bu sahifadan davom eting.',
+  },
+  web_client: {
+    tone: 'warning',
+    title: 'Telegram Web sessiyasi qabul qilinmaydi',
+    text: 'Telefon yoki desktop Telegram ilovasida oching — yoki Google hisobingiz bilan davom eting.',
+  },
+  no_telegram: {
+    tone: 'neutral',
+    title: 'Telegram ichida yoki Google bilan kiring',
+    text: 'Telegram botini ochib, keyin bu sahifani ishlatishingiz mumkin. Alternativ — Google orqali kirish.',
+  },
+};
+
+const GOOGLE_VISIBLE_STATUSES = ['no_telegram', 'web_client', 'not_registered'];
 
 export default function Login() {
-  const { status, authError } = useAuth();
+  const { status, authError, loginWithGoogle, loginWithPassword } = useAuth();
   const navigate = useNavigate();
-
-  // Admin uchun yashirin kirish — oddiy foydalanuvchilar buni ko'rmaydi/ishlatmaydi
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [adminLogin, setAdminLogin] = useState('');
-  const [adminPass, setAdminPass] = useState('');
-  const [adminError, setAdminError] = useState('');
-  const [adminLoading, setAdminLoading] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [emailValue, setEmailValue] = useState('');
+  const [emailPass, setEmailPass] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
 
   useEffect(() => {
-    if (status === 'user') navigate('/', { replace: true });
+    if (status === 'user') navigate('/dashboard', { replace: true });
     if (status === 'admin') navigate('/admin', { replace: true });
   }, [status, navigate]);
 
-  async function handleAdminSubmit(e) {
-    e.preventDefault();
-    setAdminError('');
-    setAdminLoading(true);
+  async function handleGoogleCredential(credential) {
+    if (!credential) return;
+    setGoogleBusy(true);
+    const ok = await loginWithGoogle(credential);
+    setGoogleBusy(false);
+    if (ok) navigate('/dashboard', { replace: true });
+  }
+
+  async function handleEmailSubmit(event) {
+    event.preventDefault();
+    setEmailError('');
+    const email = emailValue.trim();
+    if (!email || !emailPass) {
+      setEmailError('Email va parolni kiriting.');
+      return;
+    }
+    setEmailLoading(true);
     try {
-      const data = await api.post('/auth/login.php', { login: adminLogin.trim(), pass: adminPass });
-      navigate(data.role === 'admin' ? '/admin' : '/', { replace: true });
-    } catch (err) {
-      setAdminError(err instanceof ApiError ? err.message : 'Kirishda xatolik yuz berdi.');
+      const ok = await loginWithPassword(email, emailPass);
+      if (ok) navigate('/dashboard', { replace: true });
     } finally {
-      setAdminLoading(false);
+      setEmailLoading(false);
     }
   }
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-bg text-text-muted">
-        <span className="w-9 h-9 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-        <span className="text-sm font-medium">Telegram orqali tekshirilmoqda...</span>
+      <div className="makefy-auth-loader">
+        <div className="makefy-loader" />
+        <span>Makefy tayyorlanmoqda...</span>
       </div>
     );
   }
 
+  const notice = statusCopy[status] || statusCopy.no_telegram;
+
   return (
-    <div className="min-h-screen flex items-center justify-center px-5 bg-bg">
-      <div className="w-full max-w-sm bg-surface border border-border rounded-[var(--radius-xl)] p-6 shadow-[var(--shadow-card)] text-center">
-        <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-accent-soft text-accent flex items-center justify-center text-2xl">
-          <i className="fa-brands fa-telegram" />
-        </div>
-        <h2 className="text-lg font-extrabold">Faqat Telegram orqali</h2>
+    <main className="makefy-auth-page">
+      <div className="makefy-auth-shell">
+        <Link to="/" className="makefy-brand makefy-auth-brand" aria-label="Home">
+          <img
+            src="/makefy-logo.png"
+            alt=""
+            className="makefy-brand__mark"
+            onError={(event) => {
+              if (event.currentTarget.src.endsWith('/makefy-logo.png')) {
+                event.currentTarget.src = '/makerbot-logo.png';
+              }
+            }}
+          />
+          <span className="makefy-brand__name">makefy<span>.</span></span>
+        </Link>
 
-        {status === 'not_registered' ? (
-          <p className="text-sm text-text-muted mt-2">
-            Hisobingiz topilmadi. Avval botga <b>/start</b> bosing, keyin ilovani qayta oching.
-          </p>
-        ) : status === 'web_client' ? (
-          <p className="text-sm text-text-muted mt-2">
-            Telegram veb-versiyasida (web.telegram.org) ishlamaydi. Telefoningizdagi yoki
-            kompyuteringizdagi <b>Telegram ilovasi</b>da oching.
-          </p>
-        ) : (
-          <p className="text-sm text-text-muted mt-2">
-            Bu ilova brauzerda emas, faqat Telegram bot ichida ishlaydi. Pastdagi tugma orqali
-            botni oching va u yerdan &quot;Web ilova&quot; tugmasini bosing.
-          </p>
-        )}
-
-        {authError && (
-          <div className="text-[13px] font-semibold text-danger bg-danger-soft rounded-[var(--radius-sm)] px-3 py-2 mt-3">
-            {authError}
+        <section className="makefy-auth-card makefy-auth__container" aria-label="Kirish sahifasi">
+          <div className="makefy-auth-card__header">
+            <h1 className="makefy-auth__title">Kirish</h1>
+            <p className="makefy-auth__subtitle">Makefy hisobingizga kiring va botlaringizni boshqaring.</p>
           </div>
-        )}
 
-        <a
-          href={BOT_LINK}
-          className="mt-5 inline-flex w-full items-center justify-center gap-2 py-3 rounded-[var(--radius-md)] bg-gradient-to-r from-accent to-accent-dim text-accent-text font-extrabold text-[15px]"
-        >
-          <i className="fa-brands fa-telegram" />
-          Botni ochish
-        </a>
+          {authError && <div className="makefy-auth-error">{authError}</div>}
 
-        <button
-          type="button"
-          onClick={() => setShowAdmin((v) => !v)}
-          className="mt-6 text-[11px] text-text-dim underline underline-offset-2"
-        >
-          Admin kirish
-        </button>
+          {GOOGLE_VISIBLE_STATUSES.includes(status) && (
+            <div className="makefy-auth-provider">
+              <GoogleSignInButton
+                label="Google orqali davom etish"
+                loadingLabel="Google orqali kirilmoqda..."
+                onCredential={handleGoogleCredential}
+                disabled={googleBusy}
+              />
+            </div>
+          )}
 
-        {showAdmin && (
-          <form onSubmit={handleAdminSubmit} autoComplete="off" className="space-y-3 mt-3 text-left">
-            <input
-              type="text"
-              value={adminLogin}
-              onChange={(e) => setAdminLogin(e.target.value)}
-              placeholder="Admin login"
-              className="w-full px-4 py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border text-[14px] outline-none focus:border-accent transition-colors"
-            />
-            <input
-              type="password"
-              value={adminPass}
-              onChange={(e) => setAdminPass(e.target.value)}
-              placeholder="Parol"
-              className="w-full px-4 py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border text-[14px] outline-none focus:border-accent transition-colors"
-            />
-            {adminError && (
-              <div className="text-[12px] font-semibold text-danger">{adminError}</div>
-            )}
-            <button
-              type="submit"
-              disabled={adminLoading}
-              className="w-full py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border font-bold text-[13px] disabled:opacity-60"
-            >
-              {adminLoading ? 'Tekshirilmoqda...' : 'Kirish'}
+          <div className="makefy-auth-divider"><span>yoki</span></div>
+
+          <form className="makefy-auth-form" onSubmit={handleEmailSubmit} autoComplete="on">
+            <label className="makefy-auth-field">
+              <span className="makefy-auth-field__label">Email</span>
+              <input
+                className="makefy-auth__input"
+                type="email"
+                value={emailValue}
+                onChange={(event) => setEmailValue(event.target.value)}
+                placeholder="email@example.com"
+                autoComplete="email"
+                required
+              />
+            </label>
+
+            <label className="makefy-auth-field">
+              <span className="makefy-auth-field__label">Parol</span>
+              <input
+                className="makefy-auth__input"
+                type="password"
+                value={emailPass}
+                onChange={(event) => setEmailPass(event.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+              />
+            </label>
+
+            <div className="makefy-auth-form__meta">
+              <Link to="/forgot-password" className="makefy-auth-link">Parolni unutdingizmi?</Link>
+            </div>
+
+            {emailError && <div className="makefy-auth-form__error">{emailError}</div>}
+
+            <button type="submit" className="makefy-auth__button" disabled={emailLoading}>
+              {emailLoading ? 'Yuborilmoqda...' : 'Kirish'}
             </button>
           </form>
-        )}
+
+          <div className="makefy-auth-switch makefy-auth__footer">
+            <span>Makefy hisobingiz yo‘qmi?</span>
+            <Link to="/register">Ro‘yxatdan o‘tish</Link>
+          </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

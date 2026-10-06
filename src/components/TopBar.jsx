@@ -2,22 +2,28 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { formatMoney } from '../lib/format';
+import BrandLogo from './BrandLogo';
+import NotificationBell from './NotificationBell';
+import { useI18n } from '../i18n';
 
 export default function TopBar() {
   const { user, logout } = useAuth();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
+  const tarif = user?.tarif && user.tarif !== 'oddiy' ? user.tarif : null;
 
   useEffect(() => {
-    function onClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    function onClick(event) {
+      if (ref.current && !ref.current.contains(event.target)) {
+        setOpen(false);
+      }
     }
+
     document.addEventListener('click', onClick);
     return () => document.removeEventListener('click', onClick);
   }, []);
-
-  const tarif = user?.tarif && user.tarif !== 'oddiy' ? user.tarif : null;
 
   async function handleLogout() {
     await logout();
@@ -25,65 +31,69 @@ export default function TopBar() {
   }
 
   return (
-    <div className="sticky top-0 z-30 flex items-center justify-between gap-2 px-4 py-3 bg-bg/90 backdrop-blur border-b border-border">
-      {tarif ? (
-        <Link
-          to="/tariflar"
-          className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-accent-soft text-accent"
-        >
-          <i className="fa-solid fa-crown" /> {tarif}
+    <header className="mf-topbar">
+      <div className="mf-topbar__inner">
+        <Link to="/dashboard" className="mf-topbar__brand" aria-label="Makefy bosh sahifa">
+          <BrandLogo />
         </Link>
-      ) : (
-        <span />
-      )}
 
-      <Link
-        to="/deposit"
-        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-2 border border-border text-[13px] font-bold"
-      >
-        <i className="fa-solid fa-wallet text-accent" />
-        <span>{formatMoney(user?.pul ?? 0)}</span>
-        <i className="fa-solid fa-plus text-accent text-[10px]" />
-      </Link>
+        <div className="mf-topbar__right">
+          <button type="button" onClick={() => window.dispatchEvent(new Event('mf:palette'))} aria-label={t('palette.open')} title={t('palette.open')}
+            className="w-11 h-11 md:w-10 md:h-10 grid place-items-center rounded-full text-text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-accent">
+            <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
+          </button>
+          <NotificationBell />
+          {tarif && (
+            <Link to="/tariflar" className="mf-plan-pill">
+              <i className="fa-solid fa-crown" /> {tarif}
+            </Link>
+          )}
 
-      <div className="relative" ref={ref}>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="w-9 h-9 rounded-full bg-surface-3 border border-border flex items-center justify-center font-bold text-sm"
-        >
-          {(user?.login || 'F').slice(0, 1).toUpperCase()}
-        </button>
-        {open && (
-          <div className="absolute right-0 mt-2 w-56 rounded-xl bg-surface-2 border border-border shadow-[var(--shadow-card)] overflow-hidden">
-            <div className="px-4 py-3 border-b border-border">
-              <div className="font-bold text-sm truncate">{user?.login}</div>
-              <div className="text-xs text-text-muted">ID: {user?.user_id}</div>
-            </div>
-            <MenuItem to="/profil" icon="fa-user" label="Hisobim" onClick={() => setOpen(false)} />
-            <MenuItem to="/tariflar" icon="fa-crown" label="Tariflar" onClick={() => setOpen(false)} />
-            <MenuItem to="/chat" icon="fa-comments" label="Chat" onClick={() => setOpen(false)} />
-            <MenuItem to="/sozlamalar" icon="fa-gear" label="Sozlamalar" onClick={() => setOpen(false)} />
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-danger hover:bg-danger-soft"
-            >
-              <i className="fa-solid fa-right-from-bracket w-4" /> Chiqish
+          <Link to="/deposit" className="mf-balance-pill" aria-label="Balansni to‘ldirish">
+            <span className="mf-balance-pill__icon"><i className="fa-solid fa-wallet" /></span>
+            <span>{formatMoney(user?.pul ?? 0)}</span>
+            <i className="fa-solid fa-plus mf-balance-pill__plus" />
+          </Link>
+
+          <div className="mf-profile" ref={ref}>
+            <button type="button" className="mf-profile__button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label="Profil menyusi">
+              {(user?.login || 'F').slice(0, 1).toUpperCase()}
+              <span className="mf-profile__status" />
             </button>
+
+            {open && (
+              <div className="mf-profile__menu">
+                <div className="mf-profile__head">
+                  <BrandLogo compact />
+                  <div>
+                    <div className="mf-profile__name">{user?.login}</div>
+                    <div className="mf-profile__id">ID: {user?.foydalanuvchi_id || '—'}</div>
+                  </div>
+                </div>
+
+                <MenuItem to="/profil" icon="fa-user" label="Hisobim" onClick={() => setOpen(false)} />
+                <MenuItem to="/tariflar" icon="fa-crown" label="Tariflar" onClick={() => setOpen(false)} />
+                <MenuItem to="/chat" icon="fa-comments" label="Chat" onClick={() => setOpen(false)} />
+                <MenuItem to="/sozlamalar" icon="fa-gear" label={t('nav.settings')} onClick={() => setOpen(false)} />
+                <MenuItem to="/docs" icon="fa-book" label={t('nav.docs')} onClick={() => setOpen(false)} />
+                <MenuItem to="/status" icon="fa-heart-pulse" label={t('nav.status')} onClick={() => setOpen(false)} />
+                <button type="button" onClick={handleLogout} className="mf-profile__logout">
+                  <i className="fa-solid fa-right-from-bracket" /> {t('common.logout')}
+                </button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
-    </div>
+    </header>
   );
 }
 
 function MenuItem({ to, icon, label, onClick }) {
   return (
-    <Link
-      to={to}
-      onClick={onClick}
-      className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-surface-3"
-    >
-      <i className={`fa-solid ${icon} w-4 text-text-muted`} /> {label}
+    <Link to={to} onClick={onClick} className="mf-profile__item">
+      <i className={'fa-solid ' + icon} /> {label}
+      <i className="fa-solid fa-chevron-right mf-profile__chevron" />
     </Link>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { formatMoney } from '../lib/format';
+import PlanUsage from '../components/PlanUsage';
 
 const PLAN_ICONS = { pro: 'fa-star', premium: 'fa-gem', max: 'fa-crown' };
 
@@ -38,7 +39,7 @@ export default function Tariflar() {
   if (!data) return <div className="h-40 rounded-[var(--radius-md)] bg-surface-2 animate-pulse" />;
 
   return (
-    <div>
+    <div className="mf-page mf-page--plans mf-page--standard">
       <div className="flex items-center gap-3 mb-2">
         <div className="w-11 h-11 rounded-2xl bg-accent-soft text-accent flex items-center justify-center text-lg">
           <i className="fa-solid fa-crown" />
@@ -61,6 +62,8 @@ export default function Tariflar() {
           {error}
         </div>
       )}
+
+      <PlanUsage refreshKey={data.currentPlan} />
 
       <div className="space-y-3">
         {(data.currentPlan === 'oddiy' || !data.currentPlan) && (

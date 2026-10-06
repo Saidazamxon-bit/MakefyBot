@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 
@@ -11,27 +11,38 @@ const PROGRESS_STAGES = [
   { p: 90, t: 'Bazaga yozilmoqda...' },
 ];
 
+function readableError(error, fallback = 'Xatolik yuz berdi. Qayta urinib ko‘ring.') {
+  if (!(error instanceof ApiError)) return fallback;
+  if (error.code === 'UNAUTHENTICATED') return 'Sessiya tugagan. Mini-ilovani qayta oching.';
+  if (error.code === 'FETCH_FAILED' || error.status >= 500) {
+    return 'Serverda vaqtinchalik muammo yuz berdi. Bir ozdan keyin qayta urinib ko‘ring.';
+  }
+  if (error.code === 'BAD_RESPONSE') {
+    return 'Server noto‘g‘ri javob qaytardi. Qayta urinib ko‘ring.';
+  }
+  return error.message || fallback;
+}
+
 export default function Create() {
   const [tab, setTab] = useState('shablon'); // shablon | maxsus
   const [selected, setSelected] = useState(null); // tanlangan shablon slug
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-11 h-11 rounded-2xl bg-accent-soft text-accent flex items-center justify-center text-lg">
-          <i className="fa-solid fa-plus" />
-        </div>
+    <div className="mf-page mf-page--create mf-create-layout">
+      <header className="mf-create-hero">
+        <div className="mf-create-hero__mark"><i className="fa-solid fa-wand-magic-sparkles" /></div>
         <div>
-          <h2 className="font-extrabold text-lg leading-tight">Bot yaratish</h2>
-          <p className="text-[12.5px] text-text-muted">Usulni tanlang</p>
+          <span className="mf-kicker">BUILD STUDIO</span>
+          <h1>Bot yaratish</h1>
+          <p>G‘oyangizga mos shablonni tanlang yoki o‘zingizga xos so‘rov yuboring.</p>
         </div>
-      </div>
+      </header>
 
       {!selected && (
-        <div className="flex gap-1.5 mb-4 bg-surface-2 rounded-full p-1">
+        <div className="mf-create-tabs">
           <button
             onClick={() => setTab('shablon')}
-            className={`flex-1 py-2 rounded-full text-[13px] font-bold transition-colors ${
+            className={`mf-create-tab ${
               tab === 'shablon' ? 'bg-accent text-accent-text' : 'text-text-muted'
             }`}
           >
@@ -39,7 +50,7 @@ export default function Create() {
           </button>
           <button
             onClick={() => setTab('maxsus')}
-            className={`flex-1 py-2 rounded-full text-[13px] font-bold transition-colors ${
+            className={`mf-create-tab ${
               tab === 'maxsus' ? 'bg-accent text-accent-text' : 'text-text-muted'
             }`}
           >
@@ -67,12 +78,29 @@ export default function Create() {
 function TemplatePicker({ onSelect }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('__hammasi__');
 
-  useEffect(() => {
-    api.get('/create/templates.php').then(setData).catch((err) => setError(err.message));
+  const loadTemplates = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await api.get('/create/templates.php');
+      setData({
+        categories: Array.isArray(result.categories) ? result.categories : [],
+        templates: Array.isArray(result.templates) ? result.templates : [],
+      });
+    } catch (err) {
+      setError(readableError(err, 'Shablonlarni yuklab bo‘lmadi.'));
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadTemplates();
+  }, [loadTemplates]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -84,8 +112,38 @@ function TemplatePicker({ onSelect }) {
     });
   }, [data, query, category]);
 
-  if (error) return <p className="text-danger text-sm">{error}</p>;
-  if (!data) return <div className="h-40 rounded-[var(--radius-md)] bg-surface-2 animate-pulse" />;
+  if (loading) {
+    return (
+      <div className="space-y-3" aria-label="Shablonlar yuklanmoqda">
+        <div className="h-11 rounded-[var(--radius-md)] bg-surface-2 animate-pulse" />
+        <div className="h-8 w-2/3 rounded-full bg-surface-2 animate-pulse" />
+        <div className="grid grid-cols-2 gap-2.5">
+          {[1, 2, 3, 4].map((item) => (
+            <div key={item} className="h-24 rounded-[var(--radius-md)] bg-surface animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-[var(--radius-lg)] border border-danger/30 bg-danger-soft px-5 py-6 text-center">
+        <div className="w-11 h-11 mx-auto mb-3 rounded-full bg-danger/15 text-danger flex items-center justify-center">
+          <i className="fa-solid fa-cloud-arrow-down" />
+        </div>
+        <p className="text-sm font-bold text-danger mb-1">Shablonlarni yuklab bo‘lmadi</p>
+        <p className="text-xs text-text-muted mb-4">{error}</p>
+        <button
+          type="button"
+          onClick={loadTemplates}
+          className="px-4 py-2.5 rounded-[var(--radius-md)] bg-surface border border-border font-bold text-sm"
+        >
+          <i className="fa-solid fa-rotate-right mr-1.5" /> Qayta urinish
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -112,21 +170,37 @@ function TemplatePicker({ onSelect }) {
           <i className="fa-solid fa-circle-info mr-1.5" /> Hech narsa topilmadi
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="mf-tpl-grid">
           {filtered.map((t) => (
-            <button
-              key={t.slug}
-              onClick={() => onSelect(t.slug)}
-              className="flex flex-col items-center gap-2 py-4 px-2 rounded-[var(--radius-md)] bg-surface border border-border text-center hover:border-accent transition-colors"
-            >
-              <i className="fa-solid fa-robot text-accent text-lg" />
-              <span className="text-[12.5px] font-bold leading-tight">{t.title}</span>
+            <button key={t.slug} type="button" onClick={() => onSelect(t.slug)} className={`mf-tpl-card mf-tpl-card--${t.kind || 'default'}`}>
+              <span className="mf-tpl-card__icon">{t.icon || '🤖'}</span>
+              <span className="mf-tpl-card__body">
+                <b>{t.title}</b>
+                <small>{shortText(t.description)}</small>
+                <span className="mf-tpl-card__meta">
+                  <em>{t.category}</em>
+                  <em>{Number(t.price) > 0 ? `${formatPrice(t.price)} so'm` : 'Bepul'}</em>
+                  <em>3 kun sinov</em>
+                </span>
+              </span>
+              <i className="fa-solid fa-arrow-right mf-tpl-card__arrow" />
             </button>
           ))}
         </div>
       )}
     </div>
   );
+}
+
+function formatPrice(v) {
+  return Number(v || 0).toLocaleString('ru-RU').replace(/\u00a0/g, ' ');
+}
+
+// Tavsifning birinchi jumlasidan ("emoji Nomi — qisqa izoh") qisqa matn olamiz
+function shortText(desc = '') {
+  const lines = String(desc).split('\n').map((l) => l.trim()).filter(Boolean);
+  const head = lines.find((l, i) => i > 0 && l.length > 20) || lines[0] || '';
+  return head.length > 130 ? `${head.slice(0, 127)}…` : head;
 }
 
 function CategoryChip({ active, onClick, label }) {
@@ -153,12 +227,19 @@ function TemplateFlow({ slug, onBack }) {
   const [progress, setProgress] = useState({ pct: 0, label: 'Boshlanmoqda...' });
   const [result, setResult] = useState(null);
 
-  useEffect(() => {
-    api
-      .get(`/create/template_detail.php?nomi=${encodeURIComponent(slug)}`)
-      .then(setDetail)
-      .catch((err) => setError(err.message));
+  const loadDetail = useCallback(async () => {
+    setDetail(null);
+    setError('');
+    try {
+      setDetail(await api.get(`/create/template_detail.php?nomi=${encodeURIComponent(slug)}`));
+    } catch (err) {
+      setError(readableError(err, 'Shablon ma’lumotlarini yuklab bo‘lmadi.'));
+    }
   }, [slug]);
+
+  useEffect(() => {
+    loadDetail();
+  }, [loadDetail]);
 
   function startCreation() {
     if (!token.trim()) {
@@ -184,7 +265,7 @@ function TemplateFlow({ slug, onBack }) {
         done = true;
         setProgress({ pct: 100, label: 'Tayyor!' });
         setTimeout(() => {
-          setResult({ ok: true, botUsername: data.botUsername });
+          setResult({ ok: true, botUsername: data.botUsername, panels: data.panels, adminLogin: data.adminLogin, adminPassword: data.adminPassword });
           setStep('result');
         }, 350);
       })
@@ -192,13 +273,39 @@ function TemplateFlow({ slug, onBack }) {
         done = true;
         setProgress({ pct: 100, label: 'Xatolik yuz berdi' });
         setTimeout(() => {
-          setResult({ ok: false, error: err instanceof ApiError ? err.message : 'Xatolik yuz berdi.' });
+          setResult({ ok: false, error: readableError(err) });
           setStep('result');
         }, 350);
       });
   }
 
-  if (error) return <p className="text-danger text-sm">{error}</p>;
+  if (error) {
+    return (
+      <div className="rounded-[var(--radius-lg)] border border-danger/30 bg-danger-soft px-5 py-6 text-center">
+        <div className="w-11 h-11 mx-auto mb-3 rounded-full bg-danger/15 text-danger flex items-center justify-center">
+          <i className="fa-solid fa-triangle-exclamation" />
+        </div>
+        <p className="text-sm font-bold text-danger mb-1">Shablon ochilmadi</p>
+        <p className="text-xs text-text-muted mb-4">{error}</p>
+        <div className="flex flex-col gap-2 max-w-[220px] mx-auto">
+          <button
+            type="button"
+            onClick={loadDetail}
+            className="py-2.5 rounded-[var(--radius-md)] bg-surface border border-border font-bold text-sm"
+          >
+            <i className="fa-solid fa-rotate-right mr-1.5" /> Qayta urinish
+          </button>
+          <button
+            type="button"
+            onClick={onBack}
+            className="py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border font-bold text-sm"
+          >
+            <i className="fa-solid fa-arrow-left mr-1.5" /> Shablonlarga qaytish
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (step === 'progress') {
     return (
@@ -225,8 +332,17 @@ function TemplateFlow({ slug, onBack }) {
         <div className="w-14 h-14 mx-auto rounded-full bg-accent-soft text-accent flex items-center justify-center text-2xl mb-3">
           <i className="fa-solid fa-circle-check" />
         </div>
-        <p className="font-bold mb-1">Token qabul qilindi!</p>
-        <p className="text-sm text-text-muted mb-5">Botingiz muvaffaqiyatli ishga tushdi!</p>
+        <p className="font-bold mb-1">Botingiz ishga tushdi!</p>
+        <p className="text-sm text-text-muted mb-5">@{result.botUsername} tayyor. Quyidagi ma’lumotlarni saqlab qo‘ying.</p>
+        {result.adminPassword && (
+          <div className="mf-cred-card">
+            <div className="mf-cred-grid">
+              <div><small>Admin login</small><code>{result.adminLogin}</code></div>
+              <div><small>Admin parol</small><code>{result.adminPassword}</code></div>
+            </div>
+            <p>Bu parol faqat shu yerda va Botlarim → bot sahifasida ko‘rinadi. Kirgach o‘zgartiring.</p>
+          </div>
+        )}
         <div className="flex flex-col gap-2 max-w-[240px] mx-auto">
           {result.botUsername && (
             <a
@@ -238,7 +354,12 @@ function TemplateFlow({ slug, onBack }) {
               <i className="fa-brands fa-telegram mr-1.5" /> Botga o'tish
             </a>
           )}
-          <Link to="/" className="py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border font-bold text-sm">
+          {result.botUsername && (
+            <Link to={`/bots/${result.botUsername}`} className="py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border font-bold text-sm">
+              <i className="fa-solid fa-sliders mr-1.5" /> Botni boshqarish
+            </Link>
+          )}
+          <Link to="/dashboard" className="py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border font-bold text-sm">
             <i className="fa-solid fa-house mr-1.5" /> Asosiy menyu
           </Link>
         </div>
@@ -256,7 +377,7 @@ function TemplateFlow({ slug, onBack }) {
           >
             <i className="fa-solid fa-rotate-right mr-1.5" /> Qayta urinish
           </button>
-          <Link to="/" className="py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border font-bold text-sm">
+          <Link to="/dashboard" className="py-2.5 rounded-[var(--radius-md)] bg-surface-2 border border-border font-bold text-sm">
             <i className="fa-solid fa-house mr-1.5" /> Asosiy menyu
           </Link>
         </div>
@@ -285,7 +406,7 @@ function TemplateFlow({ slug, onBack }) {
               value={token}
               onChange={(e) => setToken(e.target.value)}
               rows={4}
-              placeholder="Botingizga beriladigan maxfiy tokenni kiriting. Tokenni qayerdan olishni bilmasangiz @BotFather'ga kirib avval bot yaratib oling!"
+              placeholder="@BotFather bergan tokenni shu yerga qo'ying (masalan 123456:ABC-DEF...)"
               className="w-full px-3.5 py-3 rounded-[var(--radius-md)] bg-surface-2 border border-border text-sm outline-none focus:border-accent mb-3"
             />
             <button
@@ -326,23 +447,21 @@ function TemplateFlow({ slug, onBack }) {
               {detail.discountPercent > 0 && (
                 <s className="text-text-muted mr-1.5">{detail.priceOriginal}</s>
               )}
-              {detail.price} so'm
+              {formatPrice(detail.price)} so'm
               {detail.discountPercent > 0 && (
                 <span className="text-accent text-xs ml-1.5">(-{detail.discountPercent}%)</span>
               )}
             </>
           }
         />
-        <InfoRow icon="fa-hourglass-half" label="Kunlik to'lov" value={`${detail.dailyFee} so'm`} />
+        <InfoRow icon="fa-hourglass-half" label="Kunlik to'lov" value={`${formatPrice(detail.dailyFee)} so'm`} />
         <InfoRow icon="fa-language" label="Interfeys tili" value={detail.language} />
         <InfoRow icon="fa-code-branch" label="Versiyasi" value={detail.version} />
         <InfoRow icon="fa-gift" label="Bonus" value="3 kunlik tekin trial" />
       </div>
 
       {detail.description && (
-        <p className="text-[12.5px] text-text-muted mb-4">
-          <i className="fa-solid fa-circle-info mr-1.5" /> {detail.description}
-        </p>
+        <div className="mf-tpl-desc">{detail.description}</div>
       )}
 
       <button
@@ -393,7 +512,7 @@ function CustomRequestForm() {
       setNomi('');
       setTavsif('');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Xatolik yuz berdi.');
+      setError(readableError(err));
     } finally {
       setBusy(false);
     }

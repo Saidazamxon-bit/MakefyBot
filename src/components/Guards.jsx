@@ -16,7 +16,6 @@ export function RequireUser({ children }) {
   if (status === 'loading') return <FullScreenLoader />;
   if (status === 'admin') return <Navigate to="/admin" replace />;
   if (status === 'user') return children;
-  // guest | no_telegram | not_registered — hammasi /login'ga (Telegram gate)
   return <Navigate to="/login" replace />;
 }
 
@@ -24,7 +23,7 @@ export function RequireUser({ children }) {
 export function RequireGuest({ children }) {
   const { status } = useAuth();
   if (status === 'loading') return <FullScreenLoader />;
-  if (status === 'user') return <Navigate to="/" replace />;
+  if (status === 'user') return <Navigate to="/dashboard" replace />;
   if (status === 'admin') return <Navigate to="/admin" replace />;
   return children;
 }
@@ -34,6 +33,6 @@ export function RequireAdmin({ children }) {
   const { status } = useAuth();
   if (status === 'loading') return <FullScreenLoader />;
   if (status === 'admin') return children;
-  if (status === 'user') return <Navigate to="/" replace />;
+  if (status === 'user') return <Navigate to="/dashboard" replace />;
   return <Navigate to="/login" replace />;
 }

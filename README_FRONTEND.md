@@ -92,7 +92,7 @@ boundary=...` bilan avtomatik to'ldiradi. Buni PHP tomonida
 
 Hozircha hech narsa qolmadi — oddiy foydalanuvchi oqimlari va
 **Admin panel** ham to'liq React'da ishlaydi (`/admin/*`, alohida
-`AdminLayout` bilan). Bot boshqaruvi (`ManageBot.jsx`) hozircha 12 ta
-yangi shablonni qamrab oladi — qolgan shablonlar xuddi shu naqsh
-bo'yicha qo'shilgan sari, `ManageBot.jsx`dagi `tabs` obyektiga va
-yangi panel komponentiga bittadan yozuv qo'shish kifoya.
+`AdminLayout` bilan). Bot boshqaruvi (`ManageBot.jsx`) yangi monetizatsiya
+arxitekturasidagi uchta shablonni qamrab oladi: Kino, Telegram Stars va
+Premium. Har bir tur uchun kontent maydonlari, Stars narxi va admin CRUD
+formasi alohida ko'rsatiladi.

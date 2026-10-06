@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatMoney } from '../lib/format';
 
@@ -55,7 +56,7 @@ export default function Referal() {
   const telegramShareUrl = `https://t.me/share/url?url=${encodeURIComponent(data.referralLink)}&text=${encodeURIComponent(shareText)}`;
 
   return (
-    <div className="space-y-4">
+    <div className="mf-page mf-page--referral mf-page--standard">
       <div className="text-center">
         <div className="w-14 h-14 mx-auto rounded-2xl bg-accent-soft text-accent flex items-center justify-center text-2xl mb-2">
           <i className="fa-solid fa-handshake" />
@@ -71,6 +72,12 @@ export default function Referal() {
         <div className="text-[13px] font-mono bg-surface-2 border border-border rounded-[var(--radius-sm)] px-3 py-2.5 mb-3 break-all">
           {data.referralLink}
         </div>
+        {data.needsTelegramLink && (
+          <p className="text-[12px] text-text-muted mb-3">
+            Referal bonuslari bot orqali hisoblanadi. Shaxsiy havolangiz chiqishi uchun Telegram akkauntingizni{' '}
+            <Link to="/sozlamalar" className="text-accent font-bold">Sozlamalar</Link> orqali ulang.
+          </p>
+        )}
         <div className="flex gap-2">
           <button
             onClick={copyLink}

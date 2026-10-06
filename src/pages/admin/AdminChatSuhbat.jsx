@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api, ApiError } from '../../lib/api';
+import { api, ApiError, mediaUrl } from '../../lib/api';
 
 const POLL_MS = 3000;
 
@@ -154,7 +154,7 @@ function Bubble({ message: m }) {
         {media.length > 0 && (
           <div className="mt-1.5 space-y-1.5">
             {media.map((img, i) => (
-              <img key={i} src={img.url} alt="" className="rounded-[var(--radius-sm)] max-w-full" />
+              <img key={i} loading="lazy" decoding="async" src={mediaUrl(img.url)} alt="" className="rounded-[var(--radius-sm)] max-w-full" />
             ))}
           </div>
         )}

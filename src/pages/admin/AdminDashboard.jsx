@@ -32,6 +32,14 @@ export default function AdminDashboard() {
         <StatCard value={formatMoney(stats.totalBalance)} label="Jami balans" color="warn" small />
       </div>
 
+      <Link to="/admin/kartalar" className="flex items-center gap-2 bg-surface border border-border rounded-[var(--radius-md)] px-4 py-3 text-sm font-bold">
+        <i className="fa-solid fa-credit-card" /> Karta avto-to‘lov: kartalar va ko‘rib chiqish →
+      </Link>
+
+      <Link to="/admin/platforma" className="flex items-center gap-2 bg-surface border border-border rounded-[var(--radius-md)] px-4 py-3 text-sm font-bold">
+        <i className="fa-solid fa-gauge-high" /> Platforma paneli: foydalanuvchilar, e‘lon, limitlar →
+      </Link>
+
       {stats.pendingRequests > 0 && (
         <Link
           to="/admin/sorovlar"

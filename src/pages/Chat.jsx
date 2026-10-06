@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError, mediaUrl } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 
 const POLL_MS = 3000;
 const SILENT_TEXTS = ['📷 Rasm'];
@@ -109,7 +109,7 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px-76px)] -mx-4">
+    <div className="mf-page mf-page--chat mf-page--standard flex flex-col h-[calc(100vh-56px-76px)] -mx-4">
       <div className="flex items-center gap-3 px-4 pb-3 border-b border-border">
         <div className="w-10 h-10 rounded-full bg-accent-soft text-accent flex items-center justify-center">
           <i className="fa-solid fa-user-shield" />
@@ -202,7 +202,7 @@ function Bubble({ message: m, onAction }) {
         {media.length > 0 && (
           <div className="mt-1.5 space-y-1.5">
             {media.map((img, i) => (
-              <img key={i} src={mediaUrl(img.url)} alt="" className="rounded-[var(--radius-sm)] max-w-full" />
+              <img key={i} loading="lazy" decoding="async" src={img.url} alt="" className="rounded-[var(--radius-sm)] max-w-full" />
             ))}
           </div>
         )}

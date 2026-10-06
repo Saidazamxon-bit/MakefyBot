@@ -38,7 +38,7 @@ export default function PulIshlash() {
   const progressPct = total > 0 ? Math.round((data.completed.length / total) * 100) : 0;
 
   return (
-    <div>
+    <div className="mf-page mf-page--tasks mf-page--standard">
       <div className="flex items-center justify-between mb-4">
         <div>
           <div className="text-[12px] font-bold text-accent uppercase tracking-wide">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 
@@ -8,6 +8,18 @@ const FILTERS = [
   { key: 'inactive', label: 'Nofaol' },
 ];
 
+function isTruthyStatus(value) {
+  return value === true || value === 1 || value === '1' || value === 'true' || value === 'active' || value === 'on';
+}
+
+function isBotActive(bot) {
+  return isTruthyStatus(bot?.faol ?? bot?.active ?? bot?.status);
+}
+
+function isWebappActive(bot) {
+  return isTruthyStatus(bot?.webapp?.faol ?? bot?.webapp?.active ?? bot?.webapp?.status);
+}
+
 export default function MyBots() {
   const [filtr, setFiltr] = useState('all');
   const [data, setData] = useState(null);
@@ -16,17 +28,37 @@ export default function MyBots() {
   const [openPanel, setOpenPanel] = useState(null); // `${username}:transfer|webapp`
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
+  const [query, setQuery] = useState('');
 
-  const load = useCallback((f) => {
+  const load = useCallback(async (filter = 'all') => {
     setError('');
-    api
-      .get(`/mybots/list.php?filtr=${f}`)
-      .then(setData)
-      .catch((err) => setError(err.message));
+    setLoading(true);
+    try {
+      setData(await api.get(`/mybots/list.php?filtr=${encodeURIComponent(filter)}`));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Botlarni yuklab bo‘lmadi.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => load(filtr), [filtr, load]);
+  useEffect(() => {
+    load(filtr);
+  }, [filtr, load]);
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(null), 3600);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const bots = Array.isArray(data?.bots) ? data.bots : [];
+  const filteredBots = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return bots;
+    return bots.filter((bot) => String(bot.username || '').toLowerCase().includes(normalized));
+  }, [bots, query]);
 
   async function doAction(payload, successMsg) {
     setBusy(true);
@@ -36,7 +68,7 @@ export default function MyBots() {
       setToast(successMsg);
       setOpenPanel(null);
       setDeleteTarget(null);
-      load(filtr);
+      await load(filtr);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Xatolik yuz berdi.');
     } finally {
@@ -44,76 +76,92 @@ export default function MyBots() {
     }
   }
 
-  if (error && !data) return <p className="text-danger text-sm">{error}</p>;
+  if (error && !data) return <div className="mf-page--error"><div className="mf-error-card"><span><i className="fa-solid fa-wifi" /></span><h1>Botlar yuklanmadi</h1><p>{error}</p><button type="button" onClick={() => load(filtr)} className="mf-button mf-button--primary"><i className="fa-solid fa-rotate-right" /> Qayta urinish</button></div></div>;
   if (!data) return <MyBotsSkeleton />;
 
+  const totalBots = Number(data.total ?? bots.length) || bots.length;
+  const activeCount = bots.filter(isBotActive).length;
+  const webappCount = bots.filter(isWebappActive).length;
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-extrabold text-lg">Mening botlarim</h2>
-        <Link
-          to="/create"
-          className="flex items-center gap-1.5 text-[13px] font-bold text-accent-text bg-gradient-to-r from-accent to-accent-dim px-3 py-2 rounded-full"
-        >
+    <div className="mf-page mf-page--bots">
+      <header className="mf-bots-head">
+        <div>
+          <span className="mf-kicker"><span className="mf-live-dot" /> BOT WORKSPACE</span>
+          <h1>Botlarim</h1>
+          <p>Barcha botlaringizni bitta tezkor markazdan boshqaring.</p>
+        </div>
+        <Link to="/create" className="mf-button mf-button--primary">
           <i className="fa-solid fa-plus" /> Yangi bot
         </Link>
-      </div>
+      </header>
 
       {toast && (
-        <div className="text-[13px] font-semibold text-accent bg-accent-soft rounded-[var(--radius-sm)] px-3 py-2 mb-3">
+        <div className="mf-toast mf-toast--success">
+          <i className="fa-solid fa-circle-check" />
           {toast}
         </div>
       )}
       {error && (
-        <div className="text-[13px] font-semibold text-danger bg-danger-soft rounded-[var(--radius-sm)] px-3 py-2 mb-3">
+        <div className="mf-toast mf-toast--error">
+          <i className="fa-solid fa-triangle-exclamation" />
           {error}
         </div>
       )}
 
-      {data.total > 0 && (
+      {totalBots > 0 && (
         <>
-          <div className="flex gap-1.5 mb-3 bg-surface-2 rounded-full p-1">
+          <div className="mf-bots-summary">
+            <SummaryCard icon="fa-robot" value={totalBots} label="Jami botlar" tone="green" />
+            <SummaryCard icon="fa-circle-check" value={activeCount} label="Faol" tone="blue" />
+            <SummaryCard icon="fa-pause" value={Math.max(totalBots - activeCount, 0)} label="Pauzada" tone="amber" />
+            <SummaryCard icon="fa-window-restore" value={webappCount} label="WebApp" tone="violet" />
+          </div>
+          <div className="mf-bots-toolbar">
+            <label className="mf-search">
+              <i className="fa-solid fa-magnifying-glass" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Botni qidirish..." />
+            </label>
+            <span className={`mf-bots-count ${loading ? 'is-loading' : ''}`}>
+              {loading && <i className="fa-solid fa-circle-notch fa-spin" />} {filteredBots.length} ta ko‘rsatilmoqda
+            </span>
+          </div>
+          <div className="mf-filter-pills">
             {FILTERS.map((f) => (
               <button
                 key={f.key}
+                type="button"
                 onClick={() => setFiltr(f.key)}
-                className={`flex-1 py-1.5 rounded-full text-[12.5px] font-bold transition-colors ${
-                  filtr === f.key ? 'bg-accent text-accent-text' : 'text-text-muted'
-                }`}
+                className={`mf-filter-pill ${filtr === f.key ? 'is-active' : ''}`}
               >
                 {f.label}
               </button>
             ))}
           </div>
-          <p className="text-[12.5px] text-text-muted font-semibold mb-3">
-            Jami: <span className="text-accent font-bold">{data.total}</span> ta bot
-          </p>
         </>
       )}
 
-      {data.total === 0 ? (
-        <div className="rounded-[var(--radius-md)] bg-surface border border-dashed border-border-light p-8 text-center">
-          <i className="fa-solid fa-robot text-2xl text-text-dim" />
-          <p className="text-sm text-text-muted mt-2 mb-2">Hozircha botingiz yo'q</p>
-          <Link to="/create" className="text-accent font-bold text-sm">
+      {totalBots === 0 ? (
+        <div className="mf-empty-state">
+          <span><i className="fa-solid fa-robot" /></span>
+          <strong>Hozircha botingiz yo‘q</strong>
+          <p>Birinchi botingizni yaratib, Makefy imkoniyatlaridan foydalaning.</p>
+          <Link to="/create" className="mf-button mf-button--primary">
+            <i className="fa-solid fa-plus" />
             Birinchi botingizni yarating →
           </Link>
         </div>
       ) : (
-        <div className="space-y-3">
-          {data.bots.map((bot) => (
+        <div className="mf-bot-grid">
+          {filteredBots.map((bot) => (
             <BotCard
               key={bot.username}
               bot={bot}
-              webappPrice={data.webappPrice}
               menuOpen={openMenu === bot.username}
-              panelOpen={openPanel === bot.username ? 'transfer' : openPanel === `${bot.username}:webapp` ? 'webapp' : null}
+              panelOpen={openPanel === bot.username ? 'transfer' : null}
               onToggleMenu={() => setOpenMenu((m) => (m === bot.username ? null : bot.username))}
               onCloseMenu={() => setOpenMenu(null)}
-              onTogglePanel={(panel) => {
-                const key = panel === 'webapp' ? `${bot.username}:webapp` : bot.username;
-                setOpenPanel((p) => (p === key ? null : key));
-              }}
+              onTogglePanel={() => setOpenPanel((p) => (p === bot.username ? null : bot.username))}
               onDelete={() => setDeleteTarget(bot.username)}
               onTransfer={(id) =>
                 doAction(
@@ -121,15 +169,14 @@ export default function MyBots() {
                   "Egalik o'tkazish so'rovi yuborildi."
                 )
               }
-              onWebappToggle={() =>
-                doAction(
-                  { amal: bot.webapp?.faol ? 'webapp_ochirish' : 'webapp_qoshish', bot_user: bot.username },
-                  bot.webapp?.faol ? "WebApp o'chirildi." : 'WebApp yoqildi.'
-                )
-              }
               busy={busy}
             />
           ))}
+          {filteredBots.length === 0 && (
+            <div className="mf-panel mf-inline-empty">
+              <i className="fa-solid fa-magnifying-glass" /> Bu qidiruv bo‘yicha bot topilmadi.
+            </div>
+          )}
         </div>
       )}
 
@@ -147,28 +194,41 @@ export default function MyBots() {
   );
 }
 
-function BotCard({ bot, webappPrice, menuOpen, panelOpen, onToggleMenu, onCloseMenu, onTogglePanel, onDelete, onTransfer, onWebappToggle, busy }) {
+function SummaryCard({ icon, value, label, tone }) {
+  return (
+    <div className={`mf-bots-summary-card mf-bots-summary-card--${tone}`}>
+      <span><i className={`fa-solid ${icon}`} /></span>
+      <div><strong>{value}</strong><small>{label}</small></div>
+    </div>
+  );
+}
+
+function BotCard({ bot, menuOpen, panelOpen, onToggleMenu, onCloseMenu, onTogglePanel, onDelete, onTransfer, busy }) {
   const [transferId, setTransferId] = useState('');
-  const waFaol = !!bot.webapp?.faol;
+  const botActive = isBotActive(bot);
+  const waFaol = isWebappActive(bot);
 
   return (
-    <div className="rounded-[var(--radius-md)] bg-surface border border-border overflow-hidden">
-      <div className="flex items-center gap-3 px-3.5 py-3">
-        <div className="w-10 h-10 rounded-[var(--radius-sm)] bg-surface-3 flex items-center justify-center text-accent flex-shrink-0">
-          <i className="fa-solid fa-robot" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 font-bold text-sm">
-            <span className={`w-1.5 h-1.5 rounded-full ${bot.faol ? 'bg-accent' : 'bg-text-dim'}`} />
-            @{bot.username}
+    <div className="mf-bot-card">
+      <div className="mf-bot-card__head">
+        <Link to={`/bots/${bot.username}`} onClick={onCloseMenu} className="mf-bot-card__main">
+          <div className={`mf-bot-card__mark ${botActive ? 'is-online' : ''}`}>
+            <i className="fa-solid fa-robot" />
           </div>
-          <div className="text-[12px] text-text-muted truncate">
-            {bot.info ? `${bot.info.turi || 'Bot'} · ${bot.info.vaqti || ''}` : "Ma'lumot yo'q"}
-            {waFaol && <span className="text-accent"> · WebApp</span>}
+          <div className="mf-bot-card__copy">
+            <div className="flex items-center gap-1.5 font-bold text-sm">
+              <span className={`w-1.5 h-1.5 rounded-full ${botActive ? 'bg-accent' : 'bg-text-dim'}`} />
+              {bot.username ? '@' + bot.username : 'Token kiritilmagan'}
+            </div>
+            <div className="text-[12px] text-text-muted truncate">
+              {bot.info ? `${bot.info.turi || 'Bot'}${bot.kun != null ? ` · ${bot.kun} kun` : ''}` : "Ma'lumot yo'q"}
+              {waFaol && <span className="text-accent"> · WebApp</span>}
+            </div>
           </div>
-        </div>
+          <i className="fa-solid fa-arrow-up-right-from-square mf-bot-card__open" />
+        </Link>
         <div className="relative">
-          <button onClick={onToggleMenu} className="w-8 h-8 flex items-center justify-center text-text-muted">
+          <button type="button" onClick={onToggleMenu} className="w-8 h-8 flex items-center justify-center text-text-muted" aria-label={`@${bot.username} menyusi`} aria-expanded={menuOpen}>
             <i className="fa-solid fa-ellipsis-vertical" />
           </button>
           {menuOpen && (
@@ -180,18 +240,21 @@ function BotCard({ bot, webappPrice, menuOpen, panelOpen, onToggleMenu, onCloseM
               >
                 <i className="fa-solid fa-pen w-4" /> Sozlash
               </Link>
+              {bot.webapp?.webapp_url && (
+                <a
+                  href={bot.webapp.webapp_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={onCloseMenu}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-surface-3"
+                >
+                  <i className="fa-solid fa-window-restore w-4" /> WebAppni ochish
+                </a>
+              )}
               <button
+                type="button"
                 onClick={() => {
-                  onTogglePanel('webapp');
-                  onCloseMenu();
-                }}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-surface-3"
-              >
-                <i className="fa-solid fa-window-restore w-4" /> {waFaol ? 'WebApp' : "WebApp qo'shish"}
-              </button>
-              <button
-                onClick={() => {
-                  onTogglePanel('transfer');
+                  onTogglePanel();
                   onCloseMenu();
                 }}
                 className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-surface-3"
@@ -199,6 +262,7 @@ function BotCard({ bot, webappPrice, menuOpen, panelOpen, onToggleMenu, onCloseM
                 <i className="fa-solid fa-right-left w-4" /> Egalik o'tkazish
               </button>
               <button
+                type="button"
                 onClick={() => {
                   onDelete();
                   onCloseMenu();
@@ -210,6 +274,14 @@ function BotCard({ bot, webappPrice, menuOpen, panelOpen, onToggleMenu, onCloseM
             </div>
           )}
         </div>
+      </div>
+      <div className="mf-bot-card__footer">
+        <Link to={`/bots/${bot.username}`} onClick={onCloseMenu} className="mf-bot-card__manage">
+          <i className="fa-solid fa-sliders" /> To‘liq boshqaruv
+        </Link>
+          <span className={`mf-bot-card__status ${botActive ? 'is-online' : ''}`}>
+            <i className="fa-solid fa-circle" /> {botActive ? 'Faol' : 'Pauzada'}
+        </span>
       </div>
 
       {panelOpen === 'transfer' && (
@@ -226,6 +298,7 @@ function BotCard({ bot, webappPrice, menuOpen, panelOpen, onToggleMenu, onCloseM
               className="flex-1 px-3 py-2 rounded-[var(--radius-sm)] bg-surface-2 border border-border text-sm outline-none focus:border-accent"
             />
             <button
+              type="button"
               disabled={busy || !transferId}
               onClick={() => onTransfer(transferId)}
               className="w-10 rounded-[var(--radius-sm)] bg-accent text-accent-text disabled:opacity-50"
@@ -236,54 +309,6 @@ function BotCard({ bot, webappPrice, menuOpen, panelOpen, onToggleMenu, onCloseM
         </div>
       )}
 
-      {panelOpen === 'webapp' && (
-        <div className="px-3.5 pb-3.5 pt-1 border-t border-border">
-          <p className="text-[12px] text-text-muted mb-2">
-            {waFaol
-              ? 'Botingizda tayyor mini-ilova ishlayapti — Telegramning "Menyu" tugmasi orqali ochiladi.'
-              : webappPrice > 0
-              ? `Botingizga tayyor mini-ilova ulanadi. Narxi: ${webappPrice.toLocaleString('ru-RU').replace(/,/g, ' ')} so'm (bir martalik).`
-              : "Botingizga tayyor mini-ilova ulanadi — tarifingizga kiritilgan, bepul! 🎁"}
-          </p>
-          {waFaol ? (
-            <div className="flex gap-2">
-              {bot.webapp?.webapp_url && (
-                <a
-                  href={bot.webapp.webapp_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 text-center py-2 rounded-[var(--radius-sm)] bg-surface-3 border border-border text-sm font-bold"
-                >
-                  <i className="fa-solid fa-arrow-up-right-from-square mr-1.5" /> Ko'rish
-                </a>
-              )}
-              <button
-                disabled={busy}
-                onClick={() => {
-                  if (confirm("WebApp o'chirilsinmi? Xohlagan payt qayta yoqishingiz mumkin, qayta to'lov olinmaydi.")) onWebappToggle();
-                }}
-                className="w-10 rounded-[var(--radius-sm)] bg-danger-soft text-danger disabled:opacity-50"
-              >
-                <i className="fa-solid fa-power-off" />
-              </button>
-            </div>
-          ) : (
-            <button
-              disabled={busy}
-              onClick={() => {
-                const msg = webappPrice > 0
-                  ? `WebApp yoqish uchun hisobingizdan ${webappPrice.toLocaleString('ru-RU').replace(/,/g, ' ')} so'm yechiladi. Davom etilsinmi?`
-                  : 'WebApp yoqilsinmi? Tarifingizga kiritilgan, bepul.';
-                if (confirm(msg)) onWebappToggle();
-              }}
-              className="w-full py-2 rounded-[var(--radius-sm)] bg-gradient-to-r from-accent to-accent-dim text-accent-text text-sm font-bold disabled:opacity-50"
-            >
-              <i className="fa-solid fa-bolt mr-1.5" />
-              {webappPrice > 0 ? `Yoqish — ${webappPrice.toLocaleString('ru-RU').replace(/,/g, ' ')} so'm` : 'Yoqish (bepul 🎁)'}
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }
